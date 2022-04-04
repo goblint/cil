@@ -1034,7 +1034,7 @@ and instr =
   | Asm        of attributes * (* Really only const and volatile can appear
                                * here *)
                   string list *         (* templates (CR-separated) *)
-                  (string option * string * lval) list *
+                  ((string option * string * lval) list *
                                           (* outputs must be lvals with
                                            * optional names and constraints.
                                            * I would like these
@@ -1043,7 +1043,7 @@ and instr =
                                            * in the Linux sources  *)
                   (string option * string * exp) list *
                                         (* inputs with optional names and constraints *)
-                  string list *         (* register clobbers *)
+                  string list) option *         (* register clobbers *)
                   location
     (** There are for storing inline assembly. They follow the GCC
       * specification:

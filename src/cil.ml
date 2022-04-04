@@ -839,7 +839,7 @@ and instr =
   | Asm        of attributes * (* Really only const and volatile can appear
                                * here *)
                   string list *         (* templates (CR-separated) *)
-                  (string option * string * lval) list *
+                  ((string option * string * lval) list *
                                           (* outputs must be lvals with
                                            * optional names and constraints.
                                            * I would like these
@@ -848,7 +848,7 @@ and instr =
                                            * in the Linux sources  *)
                   (string option * string * exp) list *
                                         (* inputs with optional names and constraints *)
-                  string list *         (* register clobbers *)
+                  string list) option *         (* register clobbers *)
                   location
         (** An inline assembly instruction. The arguments are (1) a list of
             attributes (only const and volatile can appear here and only for
@@ -1113,7 +1113,7 @@ let get_instrLoc (inst : instr) =
   match inst with
       Set(_, _, loc, _) -> loc
     | Call(_, _, _, loc, _) -> loc
-    | Asm(_, _, _, _, _, loc) -> loc
+    | Asm(_, _, _, loc) -> loc
     | VarDecl(_,loc) -> loc
 let get_globalLoc (g : global) =
   match g with
@@ -1341,7 +1341,7 @@ let mkBlock (slst: stmt list) : block =
 let mkEmptyStmt () = mkStmt (Instr [])
 let mkStmtOneInstr (i: instr) = mkStmt (Instr [i])
 
-let dummyInstr = (Asm([], ["dummy statement!!"], [], [], [], lu))
+let dummyInstr = (Asm([], ["dummy statement!!"], None, lu))
 let dummyStmt =  mkStmt (Instr [dummyInstr])
 
 let compactStmts (b: stmt list) : stmt list =
@@ -3673,7 +3673,8 @@ class defaultCilPrinterClass : cilPrinter = object (self)
              ++ unalign)
         ++ text (")" ^ printInstrTerminator)
 
-    | Asm(attrs, tmpls, outs, ins, clobs, l) ->
+    | Asm(attrs, tmpls, details, l) ->
+        let (outs, ins, clobs) = Option.value ~default:([],[],[]) details in
         self#pLineDirective l
           ++ text ("__asm__ ")
           ++ self#pAttrs () attrs
@@ -3683,7 +3684,9 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                       (fun x -> text ("\"" ^ escape_string x ^ "\""))
                       () tmpls)
                 ++
-                (if outs = [] && ins = [] && clobs = [] then
+                (if details = None then 
+                    nil
+              else if outs = [] && ins = [] && clobs = [] then
                   chr ':'
               else
                 (text ": "
@@ -5290,7 +5293,7 @@ and childrenInstr (vis: cilVisitor) (i: instr) : instr =
       if lv' != lv || fn' != fn || args' != args
       then Call(Some lv', fn', args', l, el) else i
 
-  | Asm(sl,isvol,outs,ins,clobs,l) ->
+  | Asm(sl,isvol,Some(outs,ins,clobs),l) ->
       let outs' = mapNoCopy (fun ((id,s,lv) as pair) ->
                                let lv' = fLval lv in
                                if lv' != lv then (id,s,lv') else pair) outs in
@@ -5298,7 +5301,8 @@ and childrenInstr (vis: cilVisitor) (i: instr) : instr =
                                let e' = fExp e in
                                if e' != e then (id,s,e') else pair) ins in
       if outs' != outs || ins' != ins then
-        Asm(sl,isvol,outs',ins',clobs,l) else i
+        Asm(sl,isvol,Some(outs',ins',clobs),l) else i
+  | Asm _ -> i
 
 
 (* visit all nodes in a Cil statement tree in preorder *)
@@ -5971,7 +5975,7 @@ let dExp: doc -> exp =
   fun d -> Const(CStr(sprint ~width:!lineLength d, No_encoding))
 
 let dInstr: doc -> location -> instr =
-  fun d l -> Asm([], [sprint ~width:!lineLength d], [], [], [], l)
+  fun d l -> Asm([], [sprint ~width:!lineLength d], None, l)
 
 let dGlobal: doc -> location -> global =
   fun d l -> GAsm(sprint ~width:!lineLength d, l)

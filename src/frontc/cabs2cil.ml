@@ -6833,7 +6833,7 @@ and doStatement (s : A.statement) : chunk =
         currentLoc := loc';
         currentExpLoc := loc'; (* for argument doExp below *)
         let stmts : chunk ref = ref empty in
-	let (tmpls', outs', ins', clobs') =
+	let (tmpls', details) =
 	  match details with
 	  | None ->
 	      let tmpls' =
@@ -6841,7 +6841,7 @@ and doStatement (s : A.statement) : chunk =
 		      let escape = Str.global_replace pattern "%%" in
 		      Util.list_map escape tmpls
 	      in
-	      (tmpls', [], [], [])
+	      (tmpls', None)
 	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs } ->
               let outs' =
 		Util.list_map
@@ -6865,10 +6865,10 @@ and doStatement (s : A.statement) : chunk =
 		    (id, c, e'))
 		  ins
               in
-	      (tmpls, outs', ins', clobs)
+	      (tmpls, Some (outs', ins', clobs))
 	in
         !stmts @@
-        (i2c (Asm(attr', tmpls', outs', ins', clobs', loc')))
+        (i2c (Asm(attr', tmpls', details, loc')))
 
   with e when continueOnError -> begin
     (ignore (E.log "Error in doStatement (%s)\n" (Printexc.to_string e)));
