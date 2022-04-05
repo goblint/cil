@@ -848,7 +848,8 @@ and instr =
                                            * in the Linux sources  *)
                   (string option * string * exp) list *
                                         (* inputs with optional names and constraints *)
-                  string list) option *         (* register clobbers *)
+                  string list *         (* register clobbers *)
+                  string list) option * (* goto locations *)
                   location
         (** An inline assembly instruction. The arguments are (1) a list of
             attributes (only const and volatile can appear here and only for
@@ -3674,7 +3675,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
         ++ text (")" ^ printInstrTerminator)
 
     | Asm(attrs, tmpls, details, l) ->
-        let (outs, ins, clobs) = Option.value ~default:([],[],[]) details in
+        let (outs, ins, clobs, gotos) = Option.value ~default:([],[],[],[]) details in
         self#pLineDirective l
           ++ text ("__asm__ ")
           ++ self#pAttrs () attrs
@@ -3686,7 +3687,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                 ++
                 (if details = None then 
                     nil
-              else if outs = [] && ins = [] && clobs = [] then
+              else if outs = [] && ins = [] && clobs = [] && gotos = [] then
                   chr ':'
               else
                 (text ": "
@@ -3700,7 +3701,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                               ++ self#pLval () lv
                               ++ text ")") () outs)))
               ++
-                (if ins = [] && clobs = [] then
+                (if ins = [] && clobs = [] && gotos = [] then
                   nil
                 else
                   (text ": "
@@ -3714,13 +3715,21 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                                 ++ self#pExp () e
                                 ++ text ")") () ins)))
                 ++
-                (if clobs = [] then nil
+                (if clobs = [] && gotos = [] then nil
                 else
                   (text ": "
                       ++ (docList ~sep:(chr ',' ++ break)
                             (fun c -> text ("\"" ^ escape_string c ^ "\""))
                             ()
                             clobs)))
+                ++
+                (if gotos = [] then nil
+                else
+                  (text ": "
+                      ++ (docList ~sep:(chr ',' ++ break)
+                            text
+                            ()
+                            gotos)))
                 ++ unalign)
           ++ text (")" ^ printInstrTerminator)
 
@@ -5293,7 +5302,7 @@ and childrenInstr (vis: cilVisitor) (i: instr) : instr =
       if lv' != lv || fn' != fn || args' != args
       then Call(Some lv', fn', args', l, el) else i
 
-  | Asm(sl,isvol,Some(outs,ins,clobs),l) ->
+  | Asm(sl,isvol,Some(outs,ins,clobs,gotos),l) ->
       let outs' = mapNoCopy (fun ((id,s,lv) as pair) ->
                                let lv' = fLval lv in
                                if lv' != lv then (id,s,lv') else pair) outs in
@@ -5301,7 +5310,7 @@ and childrenInstr (vis: cilVisitor) (i: instr) : instr =
                                let e' = fExp e in
                                if e' != e then (id,s,e') else pair) ins in
       if outs' != outs || ins' != ins then
-        Asm(sl,isvol,Some(outs',ins',clobs),l) else i
+        Asm(sl,isvol,Some(outs',ins',clobs,gotos),l) else i
   | Asm _ -> i
 
 

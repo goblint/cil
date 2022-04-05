@@ -6842,7 +6842,7 @@ and doStatement (s : A.statement) : chunk =
 		      Util.list_map escape tmpls
 	      in
 	      (tmpls', None)
-	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs } ->
+	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs; agotos = gotos } ->
               let outs' =
 		Util.list_map
 		  (fun (id, c, e) ->
@@ -6865,7 +6865,7 @@ and doStatement (s : A.statement) : chunk =
 		    (id, c, e'))
 		  ins
               in
-	      (tmpls, Some (outs', ins', clobs))
+	      (tmpls, Some (outs', ins', clobs, gotos))
 	in
         !stmts @@
         (i2c (Asm(attr', tmpls', details, loc')))

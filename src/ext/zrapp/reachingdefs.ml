@@ -270,7 +270,7 @@ let getDefRhs didstmh stmdat defId =
 		Set((Var vi',NoOffset),_,_,_) -> vi'.vid = vid (* _ -> NoOffset *)
 	      | Call(Some(Var vi',NoOffset),_,_,_,_) -> vi'.vid = vid (* _ -> NoOffset *)
 	      | Call(None,_,_,_,_) -> false
-	      | Asm(_,_,Some(sll,_,_),_) -> List.exists
+	      | Asm(_,_,Some(sll,_,_,_),_) -> List.exists
 		    (function (_,_,(Var vi',NoOffset)) -> vi'.vid = vid | _ -> false) sll
 	      | _ -> false)
 	  | None -> false) iihl in

@@ -1644,6 +1644,7 @@ asmattr:
      /* empty */                        { [] }
 |    VOLATILE  asmattr                  { ("volatile", []) :: $2 }
 |    CONST asmattr                      { ("const", []) :: $2 }
+|    GOTO asmattr                       { ("goto", []) :: $2 }
 ;
 asmtemplate:
     one_string_constant                          { [$1] }
@@ -1652,8 +1653,8 @@ asmtemplate:
 asmoutputs:
   /* empty */           { None }
 | COLON asmoperands asminputs
-                        { let (ins, clobs) = $3 in
-                          Some {aoutputs = $2; ainputs = ins; aclobbers = clobs} }
+                        { let (ins, (clobs, gotos)) = $3 in
+                          Some {aoutputs = $2; ainputs = ins; aclobbers = clobs; agotos = gotos} }
 ;
 asmoperands:
      /* empty */                        { [] }
@@ -1670,7 +1671,7 @@ asmoperand:
 ;
 
 asminputs:
-  /* empty */                { ([], []) }
+  /* empty */                { ([], ([], [])) }
 | COLON asmoperands asmclobber
                         { ($2, $3) }
 ;
@@ -1680,8 +1681,8 @@ asmopname:
 ;
 
 asmclobber:
-    /* empty */                         { [] }
-| COLON asmcloberlst                    { $2 }
+    /* empty */                         { ([], []) }
+| COLON asmcloberlst asmgoto            { ($2, $3) }
 ;
 asmcloberlst:
     /* empty */                         { [] }
@@ -1690,6 +1691,19 @@ asmcloberlst:
 asmcloberlst_ne:
    one_string_constant                           { [$1] }
 |  one_string_constant COMMA asmcloberlst_ne     { $1 :: $3 }
+;
+
+asmgoto:
+    /* empty */                         { [] }
+| COLON asmgotolst                      { $2 }
+;
+asmgotolst:
+    /* empty */                         { [] }
+| asmgotolst_ne                         { $1 }
+;
+asmgotolst_ne:
+   IDENT                                { [ fst $1 ] }
+|  IDENT COMMA asmgotolst_ne            { ( fst $1 ) :: $3 }
 ;
 
 %%

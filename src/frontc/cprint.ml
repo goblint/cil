@@ -718,7 +718,7 @@ and print_statement stat =
 	begin
 	  match details with
 	  | None -> ()
-	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs } ->
+	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs; agotos = gotos } ->
               print ":"; space ();
               print_commas false print_asm_operand outs;
               if ins <> [] || clobs <> [] then begin
@@ -727,6 +727,10 @@ and print_statement stat =
 		if clobs <> [] then begin
 		  print ":"; space ();
 		  print_commas false print_string clobs
+		end;
+		if gotos <> [] then begin
+		  print ":"; space ();
+		  print_commas false print gotos
 		end;
               end
 	end;

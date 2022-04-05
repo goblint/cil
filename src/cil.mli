@@ -1043,7 +1043,8 @@ and instr =
                                            * in the Linux sources  *)
                   (string option * string * exp) list *
                                         (* inputs with optional names and constraints *)
-                  string list) option *         (* register clobbers *)
+                  string list *         (* register clobbers *)
+                  string list) option * (* goto locations *)
                   location
     (** There are for storing inline assembly. They follow the GCC
       * specification:
