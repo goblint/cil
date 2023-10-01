@@ -45,6 +45,12 @@ val forceRLArgEval: bool ref
    -1 to disable *)
 val nocil: int ref
 
+(** Add an attribute to all variables which are not declared at the top scope,
+    so tools building on CIL can know which variables were pulled up.
+    Should be disabled when printing CIL code, as compilers will warn about this attribute.
+*)
+val addNestedScopeAttr: bool ref
+
 (** Indicates whether we're allowed to duplicate small chunks of code. *)
 val allowDuplication: bool ref
 

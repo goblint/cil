@@ -75,6 +75,13 @@ let nocil: int ref = ref (-1)
     *)
 let alwaysGenerateVarDecl = false
 
+(** Add an attribute to all variables which are not declared at the top scope,
+    so tools building on CIL can know which variables were pulled up.
+    Should be disabled when printing CIL code, as compilers will warn about this attribute.
+*)
+let addNestedScopeAttr = ref true
+let body_nest_count = ref 0
+
 (** Indicates whether we're allowed to duplicate small chunks. *)
 let allowDuplication: bool ref = ref true
 
@@ -557,9 +564,11 @@ let alphaConvertVarAndAddToEnv (addtoenv: bool) (vi: varinfo) : varinfo =
   in
   (* Store all locals in the slocals (in reversed order). We'll reverse them
      and take out the formals at the end of the function *)
-  if not vi.vglob then
-    !currentFunctionFDEC.slocals <- newvi :: !currentFunctionFDEC.slocals;
-
+  if not vi.vglob then(
+    if List.length !scopes > 1 then
+      newvi.vattr <- Attr("goblint_cil_nested", []) :: newvi.vattr;
+    !currentFunctionFDEC.slocals <- newvi :: !currentFunctionFDEC.slocals)
+  ;
   (if addtoenv then
     if vi.vglob then
       addGlobalToEnv vi.vname (EnvVar newvi)
@@ -6618,6 +6627,7 @@ and assignInit (lv: lval)
 
   (* Now define the processors for body and statement *)
 and doBody (blk: A.block) : chunk =
+  body_nest_count := !body_nest_count + 1;
   enterScope ();
   (* Rename the labels and add them to the environment *)
   List.iter (fun l -> ignore (genNewLocalLabel l)) blk.blabels;
@@ -6632,6 +6642,7 @@ and doBody (blk: A.block) : chunk =
          empty
          blk.A.bstmts)
   in
+  body_nest_count := !body_nest_count - 1;
   exitScope ();
 
 
