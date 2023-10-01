@@ -79,8 +79,7 @@ let alwaysGenerateVarDecl = false
     so tools building on CIL can know which variables were pulled up.
     Should be disabled when printing CIL code, as compilers will warn about this attribute.
 *)
-let addNestedScopeAttr = ref true
-let body_nest_count = ref 0
+let addNestedScopeAttr = ref false
 
 (** Indicates whether we're allowed to duplicate small chunks. *)
 let allowDuplication: bool ref = ref true
@@ -6635,7 +6634,6 @@ and assignInit (lv: lval)
 
   (* Now define the processors for body and statement *)
 and doBody (blk: A.block) : chunk =
-  body_nest_count := !body_nest_count + 1;
   enterScope ();
   (* Rename the labels and add them to the environment *)
   List.iter (fun l -> ignore (genNewLocalLabel l)) blk.blabels;
@@ -6650,7 +6648,6 @@ and doBody (blk: A.block) : chunk =
          empty
          blk.A.bstmts)
   in
-  body_nest_count := !body_nest_count - 1;
   exitScope ();
 
 
