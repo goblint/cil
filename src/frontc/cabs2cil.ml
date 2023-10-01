@@ -565,7 +565,7 @@ let alphaConvertVarAndAddToEnv (addtoenv: bool) (vi: varinfo) : varinfo =
   (* Store all locals in the slocals (in reversed order). We'll reverse them
      and take out the formals at the end of the function *)
   if not vi.vglob then(
-    if List.length !scopes > 1 then
+    if List.length !scopes > 2 then
       newvi.vattr <- Attr("goblint_cil_nested", []) :: newvi.vattr;
     !currentFunctionFDEC.slocals <- newvi :: !currentFunctionFDEC.slocals)
   ;
