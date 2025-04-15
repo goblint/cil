@@ -1651,6 +1651,7 @@ paren_attr_list:
 /*** GCC ASM instructions ***/
 asmattr:
      /* empty */                        { [] }
+|    GOTO  asmattr                   { ("goto", []) :: $2 }
 |    VOLATILE  asmattr                  { ("volatile", []) :: $2 }
 |    CONST asmattr                      { ("const", []) :: $2 }
 |    INLINE asmattr                     { ("inline", []) :: $2 }
@@ -1662,8 +1663,8 @@ asmtemplate:
 asmoutputs:
   /* empty */           { None }
 | COLON asmoperands asminputs
-                        { let (ins, clobs) = $3 in
-                          Some {aoutputs = $2; ainputs = ins; aclobbers = clobs} }
+                        { let (ins, clobs, gotos) = $3 in
+                          Some {aoutputs = $2; ainputs = ins; aclobbers = clobs; agotos = gotos;} }
 ;
 asmoperands:
      /* empty */                        { [] }
@@ -1680,9 +1681,10 @@ asmoperand:
 ;
 
 asminputs:
-  /* empty */                { ([], []) }
+  /* empty */                { ([], [], []) }
 | COLON asmoperands asmclobber
-                        { ($2, $3) }
+                        { let (clobs, gotos) = $3 in
+                          ($2, clobs, gotos) }
 ;
 asmopname:
     /* empty */                         { None }
@@ -1690,8 +1692,8 @@ asmopname:
 ;
 
 asmclobber:
-    /* empty */                         { [] }
-| COLON asmclobberlst                   { $2 }
+    /* empty */                         { ([], []) }
+| COLON asmclobberlst asmgoto                   { ($2, $3) }
 ;
 asmclobberlst:
     /* empty */                         { [] }
@@ -1700,6 +1702,24 @@ asmclobberlst:
 asmclobberlst_ne:
    one_string_constant                           { [$1] }
 |  one_string_constant COMMA asmclobberlst_ne    { $1 :: $3 }
+;
+
+asmgoto:
+  /* empty */ { [] }
+| COLON asmgotolst { $2 }
+;
+
+asmgotolst:
+  /* empty */ { [] }
+| asmgotolst_ne { $1 }
+;
+
+asmgotolst_ne:
+  asmgotolabel { [$1] }
+| asmgotolabel COMMA asmgotolst_ne { $1 :: $3 }
+;
+
+asmgotolabel: IDENT { fst $1 }
 ;
 
 %%

@@ -267,15 +267,13 @@ let getDefRhs didstmh stmdat defId =
 	  match time "iosh_defId_find" (iosh_defId_find iosh') defId with
 	    Some vid ->
 	      (match i with
-		Set((Var vi',NoOffset),_,_,_) -> vi'.vid = vid (* _ -> NoOffset *)
+               Set((Var vi',NoOffset),_,_,_) -> vi'.vid = vid (* _ -> NoOffset *)
 	      | Call(Some(Var vi',NoOffset),_,_,_,_) -> vi'.vid = vid (* _ -> NoOffset *)
 	      | Call(None,_,_,_,_) -> false
-	      | Asm(_,_,sll,_,_,_) -> List.exists
-		    (function (_,_,(Var vi',NoOffset)) -> vi'.vid = vid | _ -> false) sll
 	      | _ -> false)
 	  | None -> false) iihl in
 	(match i with
-	  Set((lh,_),e,_,_) ->
+         Set((lh,_),e,_,_) ->
 	    (match lh with
 	      Var(vi') ->
 		(IH.add rhsHtbl defId (Some(RDExp(e),stm.sid,iosh_in));
@@ -284,7 +282,6 @@ let getDefRhs didstmh stmdat defId =
 	| Call(lvo,e,el,_,_) ->
 	    (IH.add rhsHtbl defId (Some(RDCall(i),stm.sid,iosh_in));
 	     Some(RDCall(i), stm.sid, iosh_in))
-	| Asm(a,sl,slvl,sel,sl',_) -> None
   | VarDecl _ -> None
   ) (* ? *)
 	with Not_found ->
@@ -292,6 +289,7 @@ let getDefRhs didstmh stmdat defId =
 	   IH.add rhsHtbl defId None;
 	   None))
       with Invalid_argument _ -> None end
+	| Asm _ -> None
   | _ -> E.s (E.error "getDefRhs: defining statement not an instruction list %d" defId)
 	(*None*)
 

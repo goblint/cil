@@ -823,6 +823,27 @@ and stmtkind =
   | Block of block                      (** Just a block of statements. Use it
                                             as a way to keep some attributes
                                             local *)
+  | Asm        of attributes * (* Really only const and volatile can appear
+                here *)
+              string list *         (* templates (CR-separated) *)
+              (string option * string * lval) list *
+                        (* outputs must be lvals with
+                            optional names and constraints.
+                            I would like these
+                            to be actually variables, but I
+                            run into some trouble with ASMs
+                            in the Linux sources  *)
+              (string option * string * exp) list *
+                      (* inputs with optional names and constraints *)
+              string list *         (* register clobbers *)
+              stmt ref list *         (* goto labels *)
+              location
+              (** An inline assembly instruction. The arguments are (1) a list of
+              attributes (only const and volatile can appear here and only for
+              GCC), (2) templates (CR-separated), (3) a list of
+              outputs, each of which is an lvalue with a constraint, (4) a list
+              of input expressions along with constraints, (5) clobbered
+              registers, and (5) location information *)
 
 (** Instructions. They may cause effects directly but may not have control
     flow.*)
@@ -856,26 +877,6 @@ and instr =
                             are used *)
                          (* sm: I've added a notes.txt file which contains more
                             information on interpreting Asm instructions *)
-  | Asm        of attributes * (* Really only const and volatile can appear
-                                 here *)
-                  string list *         (* templates (CR-separated) *)
-                  (string option * string * lval) list *
-                                          (* outputs must be lvals with
-                                             optional names and constraints.
-                                             I would like these
-                                             to be actually variables, but I
-                                             run into some trouble with ASMs
-                                             in the Linux sources  *)
-                  (string option * string * exp) list *
-                                        (* inputs with optional names and constraints *)
-                  string list *         (* register clobbers *)
-                  location
-        (** An inline assembly instruction. The arguments are (1) a list of
-            attributes (only const and volatile can appear here and only for
-            GCC), (2) templates (CR-separated), (3) a list of
-            outputs, each of which is an lvalue with a constraint, (4) a list
-            of input expressions along with constraints, (5) clobbered
-            registers, and (5) location information *)
 
 
 
@@ -1136,7 +1137,6 @@ let get_instrLoc (inst : instr) =
   match inst with
       Set(_, _, loc, _) -> loc
     | Call(_, _, _, loc, _) -> loc
-    | Asm(_, _, _, _, _, loc) -> loc
     | VarDecl(_,loc) -> loc
 let get_globalLoc (g : global) =
   match g with
@@ -1166,6 +1166,7 @@ let rec get_stmtLoc (statement : stmtkind) =
     | Loop (_, loc, _, _, _) -> loc
     | Block b -> if b.bstmts == [] then lu
                  else get_stmtLoc ((List.hd b.bstmts).skind)
+    | Asm(_, _, _, _, _, _, loc) -> loc
 
 
 (* The next variable identifier to use. Counts up *)
@@ -1364,8 +1365,7 @@ let mkBlock (slst: stmt list) : block =
 let mkEmptyStmt () = mkStmt (Instr [])
 let mkStmtOneInstr (i: instr) = mkStmt (Instr [i])
 
-let dummyInstr = (Asm([], ["dummy statement!!"], [], [], [], lu))
-let dummyStmt =  mkStmt (Instr [dummyInstr])
+let dummyStmt =  mkStmt (Asm([], ["dummy statement!!"], [], [], [], [], lu))
 
 let compactStmts (b: stmt list) : stmt list =
       (* Try to compress statements. Scan the list of statements and remember
@@ -3749,54 +3749,6 @@ class defaultCilPrinterClass : cilPrinter = object (self)
              ++ unalign)
         ++ text (")" ^ printInstrTerminator)
 
-    | Asm(attrs, tmpls, outs, ins, clobs, l) ->
-        self#pLineDirective l
-          ++ text ("__asm__ ")
-          ++ self#pAttrs () attrs
-          ++ text " ("
-          ++ (align
-                ++ (docList ~sep:line
-                      (fun x -> text ("\"" ^ escape_string x ^ "\""))
-                      () tmpls)
-                ++
-                (if outs = [] && ins = [] && clobs = [] then
-                  chr ':'
-              else
-                (text ": "
-                    ++ (docList ~sep:(chr ',' ++ break)
-                          (fun (idopt, c, lv) ->
-                          text(match idopt with
-                                None -> ""
-                              | Some id -> "[" ^ id ^ "] "
-                          ) ++
-                            text ("\"" ^ escape_string c ^ "\" (")
-                              ++ self#pLval () lv
-                              ++ text ")") () outs)))
-              ++
-                (if ins = [] && clobs = [] then
-                  nil
-                else
-                  (text ": "
-                      ++ (docList ~sep:(chr ',' ++ break)
-                            (fun (idopt, c, e) ->
-                              text(match idopt with
-                                    None -> ""
-                                  | Some id -> "[" ^ id ^ "] "
-                              ) ++
-                              text ("\"" ^ escape_string c ^ "\" (")
-                                ++ self#pExp () e
-                                ++ text ")") () ins)))
-                ++
-                (if clobs = [] then nil
-                else
-                  (text ": "
-                      ++ (docList ~sep:(chr ',' ++ break)
-                            (fun c -> text ("\"" ^ escape_string c ^ "\""))
-                            ()
-                            clobs)))
-                ++ unalign)
-          ++ text (")" ^ printInstrTerminator)
-
 
   (**** STATEMENTS ****)
   method pStmt () (s:stmt) =        (* control-flow statement *)
@@ -4018,6 +3970,75 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                   ++ self#pBlock () b)
     end
     | Block b -> align ++ self#pBlock () b
+    | Asm(attrs, tmpls, outs, ins, clobs, gotos, l) ->
+        let hasGotoAttr = List.length (List.filter (fun attr -> match attr with
+          Attr("goto", _) -> true
+          | _ -> false) attrs) > 0 in
+        self#pLineDirective l
+          ++ text ("__asm__ ")
+          ++ self#pAttrs () attrs
+          ++ text " ("
+          ++ (align
+                ++ (docList ~sep:line
+                      (fun x -> text ("\"" ^ escape_string x ^ "\""))
+                      () tmpls)
+                ++
+                (if outs = [] && ins = [] && clobs = [] && not hasGotoAttr then
+                  chr ':'
+              else
+                (text ": "
+                    ++ (docList ~sep:(chr ',' ++ break)
+                          (fun (idopt, c, lv) ->
+                          text(match idopt with
+                                None -> ""
+                              | Some id -> "[" ^ id ^ "] "
+                          ) ++
+                            text ("\"" ^ escape_string c ^ "\" (")
+                              ++ self#pLval () lv
+                              ++ text ")") () outs)))
+              ++
+                (if ins = [] && clobs = [] && not hasGotoAttr then
+                  nil
+                else
+                  (text ": "
+                      ++ (docList ~sep:(chr ',' ++ break)
+                            (fun (idopt, c, e) ->
+                              text(match idopt with
+                                    None -> ""
+                                  | Some id -> "[" ^ id ^ "] "
+                              ) ++
+                              text ("\"" ^ escape_string c ^ "\" (")
+                                ++ self#pExp () e
+                                ++ text ")") () ins)))
+                ++
+                (if clobs = [] && not hasGotoAttr then nil
+                else
+                  (text ": "
+                      ++ (docList ~sep:(chr ',' ++ break)
+                            (fun c -> text ("\"" ^ escape_string c ^ "\""))
+                            ()
+                            clobs))
+                ++
+                (if not hasGotoAttr then nil
+                else
+                  (text ": "
+                      ++ (docList ~sep:(chr ',' ++ break)
+                            (fun c -> text c)
+                            ()
+                            (List.map (fun stmt -> 
+                              let rec pickLabel = function
+                                  [] -> None
+                                | Label (l, _, _) :: _ -> Some l
+                                | _ :: rest -> pickLabel rest
+                              in
+                              match pickLabel !stmt.labels with
+                                Some lbl -> lbl
+                              | None ->
+                                  ignore (error "Cannot find label for target of goto");
+                                  "__invalid_label;"
+                              ) gotos)))))
+                ++ unalign)
+          ++ text (")" ^ printInstrTerminator)
 
 
   (*** GLOBALS ***)
@@ -4372,6 +4393,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
     | "aconst", [] -> text "__const__", true
     | "thread", [] -> text "__thread", false
     | "volatile", [] -> text "volatile", false
+    | "goto", [] -> text "goto", false
     | "restrict", [] -> text "__restrict", false
     | "missingproto", [] -> text "/* missing proto */", false
     | "asm", args ->
@@ -5371,16 +5393,6 @@ and childrenInstr (vis: cilVisitor) (i: instr) : instr =
       if lv' != lv || fn' != fn || args' != args
       then Call(Some lv', fn', args', l, el) else i
 
-  | Asm(sl,isvol,outs,ins,clobs,l) ->
-      let outs' = mapNoCopy (fun ((id,s,lv) as pair) ->
-                               let lv' = fLval lv in
-                               if lv' != lv then (id,s,lv') else pair) outs in
-      let ins'  = mapNoCopy (fun ((id,s,e) as pair) ->
-                               let e' = fExp e in
-                               if e' != e then (id,s,e') else pair) ins in
-      if outs' != outs || ins' != ins then
-        Asm(sl,isvol,outs',ins',clobs,l) else i
-
 
 (* visit all nodes in a Cil statement tree in preorder *)
 and visitCilStmt (vis: cilVisitor) (s: stmt) : stmt =
@@ -5443,6 +5455,15 @@ and childrenStmt (toPrepend: instr list ref) : cilVisitor -> stmt -> stmt =
     | Block b ->
         let b' = fBlock b in
         if b' != b then Block b' else s.skind
+    | Asm(sl,isvol,outs,ins,clobs,gotos,l) ->
+      let outs' = mapNoCopy (fun ((id,s,lv) as pair) ->
+                              let lv' = visitCilLval vis lv in
+                              if lv' != lv then (id,s,lv') else pair) outs in
+      let ins'  = mapNoCopy (fun ((id,s,e) as pair) ->
+                              let e' = fExp e in
+                              if e' != e then (id,s,e') else pair) ins in
+      if outs' != outs || ins' != ins then
+        Asm(sl,isvol,outs',ins',clobs,gotos,l) else s.skind
   in
   if skind' != s.skind then s.skind <- skind';
   (* Visit the labels *)
@@ -5934,7 +5955,7 @@ let rec peepHole1 (* Process one instruction and possibly replace it *)
       | Switch (e, b, _, _, _) -> peepHole1 doone b.bstmts
       | Loop (b, l, el, _, _) -> peepHole1 doone b.bstmts
       | Block b -> peepHole1 doone b.bstmts
-      | Return _ | Goto _ | ComputedGoto _ | Break _ | Continue _ -> ())
+      | Return _ | Goto _ | ComputedGoto _ | Break _ | Continue _ | Asm _ -> ())
     ss
 
 let rec peepHole2  (* Process two instructions and possibly replace them both *)
@@ -5962,7 +5983,7 @@ let rec peepHole2  (* Process two instructions and possibly replace them both *)
       | Loop (b, l, el, _, _) -> peepHole2 dotwo b.bstmts
       | Block b -> peepHole2 dotwo b.bstmts
 
-      | Return _ | Goto _ | ComputedGoto _ | Break _ | Continue _ -> ())
+      | Return _ | Goto _ | ComputedGoto _ | Break _ | Continue _ | Asm _ -> ())
     ss
 
 
@@ -6055,8 +6076,8 @@ let typeSigAttrs = function
 let dExp: doc -> exp =
   fun d -> Const(CStr(sprint ~width:!lineLength d, No_encoding))
 
-let dInstr: doc -> location -> instr =
-  fun d l -> Asm([], [sprint ~width:!lineLength d], [], [], [], l)
+let dStmt: doc -> location -> stmt =
+  fun d l -> mkStmt (Asm([], [sprint ~width:!lineLength d], [], [], [], [], l))
 
 let dGlobal: doc -> location -> global =
   fun d l -> GAsm(sprint ~width:!lineLength d, l)
@@ -6429,6 +6450,10 @@ class copyFunctionVisitor (newname: string) = object (self)
         | Switch (e, body, cases, l, el) ->
             s.skind <- Switch (e, body,
                                Util.list_map (fun cs -> findStmt cs.sid) cases, l, el)
+        | Asm(attr, template, outs, ins, clobbers, gotos, loc) ->
+            (* Make a copy of the reference *)
+            let gotos' = List.map (fun sr -> ref (findStmt !sr.sid)) gotos in
+            s.skind <- Asm(attr, template, outs, ins, clobbers, gotos', loc)
         | _ -> ()
       in
       List.iter patchstmt !patches;
@@ -6470,7 +6495,7 @@ class copyFunctionVisitor (newname: string) = object (self)
     H.add stmtmap s.sid s'; (* Remember where we copied this *)
     (* if we have a Goto or a Switch remember them to fixup at end *)
     (match s'.skind with
-      (Goto _ | Switch _) -> patches := s' :: !patches
+      (Goto _ | Switch _ | Asm _) -> patches := s' :: !patches
     | _ -> ());
     (* Do the children *)
     ChangeDoChildrenPost (s', fun x -> x)
@@ -6541,6 +6566,9 @@ and succpred_stmt s fallthrough rlabels =
   | Return _ -> ()
   | Goto(dest,l) -> link s !dest
   | ComputedGoto(e,l) ->  List.iter (link s) rlabels
+  | Asm(_, _, _, _, _, gotos, _) ->
+    List.iter (fun l -> link s !l) gotos;
+    trylink s fallthrough
   | Break _
   | Continue _
   | Switch _ ->
@@ -6631,7 +6659,7 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
   | Default(l,el) -> Label(freshLabel "switch_default",l,false)
   ) s.labels ;
   match s.skind with
-  | Instr _ | Return _ | Goto _ | ComputedGoto _ -> ()
+  | Instr _ | Return _ | Goto _ | ComputedGoto _ | Asm _ -> ()
   | Break(l) -> begin try
                   s.skind <- Goto(break_dest (),l)
                 with e ->

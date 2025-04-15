@@ -159,8 +159,6 @@ let rec search_instr_list_for_var list name varid includeCallTmp =
       search_expression exp name loc varid includeCallTmp
       @ search_expression_list exp_list name loc varid includeCallTmp
       @ search_instr_list_for_var xs name varid includeCallTmp
-  (* Should I consider Asm too? *)
-  | _ :: xs -> search_instr_list_for_var xs name varid includeCallTmp
   | [] -> []
 
 (* Finds a variable in a list of statements *)
@@ -195,6 +193,15 @@ let rec search_stmt_list_for_var list name varid includeCallTmp =
           @ search_stmt_list_for_var [ s2 ] name varid includeCallTmp
       | Block block ->
           search_stmt_list_for_var block.bstmts name varid includeCallTmp
+      | Asm(_, _, outs, ins, _, gotos, loc) ->
+        List.flatten (
+          List.concat([
+            (List.map (fun asmout -> match asmout with
+              (_, _, lval) -> search_expression (Lval lval) name loc varid includeCallTmp) outs);
+            (List.map (fun asmin -> match asmin with
+              (_, _, exp) -> search_expression exp name loc varid includeCallTmp) ins)
+          ])
+        )
       | _ -> [] )
       @ search_stmt_list_for_var xs name varid includeCallTmp
   | [] -> []

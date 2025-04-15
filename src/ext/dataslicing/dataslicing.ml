@@ -361,6 +361,7 @@ let rec sliceStmtKind (sk : stmtkind) : stmtkind =
                                    applyOption sliceStmt so1,
                                    applyOption sliceStmt so2)
   | Goto _ -> sk
+  | Asm _ -> sk
   | _ -> E.s (unimp "statement")
 
 and sliceStmt (s : stmt) : stmt =

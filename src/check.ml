@@ -809,7 +809,21 @@ and checkStmt (s: stmt) =
               in
               findCase !statements)
             cases;
-
+      | Asm (_, _, _, _, _, gotos, l) ->
+        currentLoc := l;
+        (* Find a label *)
+        List.iter (fun gref ->
+          let lab =
+            match List.filter (function Label _ -> true | _ -> false)
+                  !gref.labels with
+              Label (lab, _, _) :: _ -> lab
+            | _ ->
+                ignore (warn "Assembly goto to block without a label");
+                "<missing label>"
+          in
+          (* Remember it as a target *)
+          gotoTargets := (lab, !gref) :: !gotoTargets
+        ) gotos
       | Instr il -> List.iter checkInstr il)
     () (* argument of withContext *)
 
@@ -884,8 +898,6 @@ and checkInstr (i: instr) =
   | VarDecl (v,_) ->
       if not v.vhasdeclinstruction then
         E.s (bug "Encountered a VarDecl, but vhasdeclinstruction for the varinfo is not set")
-
-  | Asm _ -> ()  (* Not yet implemented *)
 
 let rec checkGlobal = function
     GAsm _ -> ()

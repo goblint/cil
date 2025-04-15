@@ -1167,6 +1167,7 @@
      | Switch (_, b, _, _, _) -> 43 + (47 * stmtListSum b.bstmts) (* don't look at stmt list b/c is not part of tree *)
      | Loop (b, _, _, _, _) -> 49 + (53 * stmtListSum b.bstmts)
      | Block b -> 59 + (61 * stmtListSum b.bstmts)
+     | Asm _ -> 67
    in
 
    (* disabled 2nd and 3rd measure because they appear to get different

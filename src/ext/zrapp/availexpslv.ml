@@ -305,12 +305,6 @@ let lvh_handle_inst i lvh =
       end;
       lvh
   end
-  | Asm(_,_,_,_,_,_) -> begin
-      let _,d = UD.computeUseDefInstr i in
-      UD.VS.iter (fun vi ->
-	lvh_kill_vi lvh vi) d;
-      lvh
-  end
   | VarDecl _ ->   raise (Unimplemented "VarDecl") (* VarDecl instruction is not supported for availexpslv, to make availexpslv work for programs without VLA *)
                                                    (* make sure to set alwaysGenerateVarDecl in cabs2cil.ml to false. To support VLA, implement this.  *)
 

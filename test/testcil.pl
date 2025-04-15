@@ -182,6 +182,7 @@ addTest("test/asm3 _GNUCC=1");
 addTest("test/asm4 _GNUCC=1");
 addTest("test/asm_emptyclobberallowed _GNUCC=1");
 addTest("testobj/asm5 _GNUCC=1");
+addTest("test/asm6");
 
 addTest("testrun/offsetof");
 addTest("testrun/offsetof1");
