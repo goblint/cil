@@ -5590,6 +5590,26 @@ and doInit
 
    (* We have a designator *)
   | _, (what, ie) :: restil when what != A.NEXT_INIT ->
+      let rec unrollDesignatorForNestedAnonymous (comp: compinfo) (designator: string) (whatnext: initwhat) =
+        let own_field = List.filter (fun fld -> fld.fname = designator) comp.cfields in
+        match own_field with
+          [] -> begin
+            let anonymous_compounds = List.filter_map (fun f ->
+              match (f.fname, f.ftype) with
+                (missingFieldName, TComp(compinfo, attrs)) -> Some(f, compinfo)
+              | _ -> None
+            ) comp.cfields in
+            let anonymous_compound_inits = List.filter_map (fun (comp_field, comp) -> match unrollDesignatorForNestedAnonymous comp designator whatnext with
+              _, Some(what) -> Some(comp_field, what)
+            | _, None -> None) anonymous_compounds in
+            match anonymous_compound_inits with
+              [] -> (false, None)
+            | (comp_fld, compwhat) :: _ ->
+              (false, Some(A.INFIELD_INIT (comp_fld.fname, compwhat)))
+          end
+        | fld :: _ ->
+            (true, Some(A.INFIELD_INIT (designator, whatnext)))
+      in
       (* Process a designator and position to the designated subobject *)
       let addressSubobj
           (so: subobj)
@@ -5604,10 +5624,17 @@ and doInit
           | A.INFIELD_INIT (fn, whatnext) -> begin
               match unrollType so.soTyp with
                 TComp (comp, _) ->
-                  let toinit = fieldsToInit comp (Some fn) in
-                  so.stack <- InComp(so.soOff, comp, toinit) :: so.stack;
-                  normalSubobj so;
-                  address whatnext acc
+                  let unrolledWhat = unrollDesignatorForNestedAnonymous comp fn whatnext in
+                  begin
+                    match unrolledWhat with
+                      false, Some(unrolled) ->
+                        address unrolled acc
+                    | _ -> 
+                      let toinit = fieldsToInit comp (Some fn) in
+                      so.stack <- InComp(so.soOff, comp, toinit) :: so.stack;
+                      normalSubobj so;
+                      address whatnext acc
+                  end;
 
               | _ -> E.s (error "Field designator %s not in a struct " fn)
           end
