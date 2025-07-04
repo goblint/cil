@@ -1,3 +1,7 @@
+## 2.0.6
+* Optimize `Pretty.text` (#169, #177).
+* Remove dynlink and findlib dependencies from library (#170).
+
 ## 2.0.5
 * Add enumerator attributes (#172).
 * Generate 32bit and 64bit `Machdep` if possible (#173).

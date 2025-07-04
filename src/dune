@@ -3,7 +3,7 @@
 (library
   (public_name goblint-cil)
   (name goblintCil)
-  (libraries zarith unix str stdlib-shims)
+  (libraries zarith unix str stdlib-shims domain_shims)
   (modules (:standard \ main mainFeature ciloptions machdepConfigure machdepArchConfigure modelConfigure))
 )
 

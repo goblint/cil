@@ -276,7 +276,7 @@ else
 endif
 
 testrun/% : $(SMALL1)/%.ml
-	ocamlfind $(CAMLC) -I $(OBJDIR_DUNE) -I $(OBJDIR_MAKE) -package zarith unix.$(CMXA) str.$(CMXA) zarith.$(CMXA) \
+	ocamlfind $(CAMLC) -I $(OBJDIR_DUNE) -I $(OBJDIR_MAKE) -package zarith -package domain_shims unix.$(CMXA) str.$(CMXA) zarith.$(CMXA) threads.$(CMXA) domain_shims.$(CMXA) -thread \
                  goblintCil.$(CMXA) \
                  $(EXEOUT) $(basename $<).exe $<
 	$(basename $<).exe

@@ -208,6 +208,7 @@ addTest("testrun/strloop");
 addTest("testrun/strloop3");
 addTest("testrun/percentm");
 addTest("testrun/percent400");
+addTest("testrun/do_while_cont");
 addTest("testrun/caserange _GNUCC=1");
 
 addTest("testrun/attr-in-decllist");

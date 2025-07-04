@@ -52,6 +52,9 @@
 
 (** API *)
 
+(** refDLS is an alias for Domain.DLS.key *)
+type 'a refDLS = 'a Domain.DLS.key
+
 (** The type of unformated documents. Elements of this type can be 
    constructed in two ways. Either with a number of constructor shown below, 
    or using the {!Pretty.dprintf} function with a [printf]-like interface. 
@@ -296,15 +299,15 @@ val withPrintDepth : int -> (unit -> unit) -> unit
     everything is replaced with ellipsis *)
 val printDepth   : int ref
 
-val printIndent  : bool ref  (** If false then does not indent *)
+val printIndent  : bool ref (** If false then does not indent *)
 
 
 (** If set to [true] then optional breaks are taken only when the document 
     has exceeded the given width. This means that the printout will looked 
     more ragged but it will be faster *)
-val fastMode  : bool ref 
+val fastMode  : bool ref
 
-val flushOften   : bool ref  (** If true the it flushes after every print *)
+val flushOften   : bool ref (** If true the it flushes after every print *)
 
 (** Whether to rebalance doc before printing it to avoid stack-overflows *)
 val flattenBeforePrint : bool ref
@@ -312,7 +315,7 @@ val flattenBeforePrint : bool ref
 
 (** Keep a running count of the taken newlines. You can read and write this 
     from the client code if you want *)
-val countNewLines : int ref
+val countNewLines : int refDLS
 
 
 (** A function that when used at top-level in a module will direct 
