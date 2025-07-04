@@ -30,6 +30,15 @@ const cpuid_lookup_t cpuid_lookup[68] = {
 
 un v = { .leaf = 13 };
 
+typedef struct {
+  struct {};
+  struct {
+    long a;
+  };
+} b;
+
+b c = { .a = 0 };
+
 int main(int i) {
   return 5;
 }

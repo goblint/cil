@@ -2307,7 +2307,7 @@ and advanceSubobj (so: subobj) : unit =
 
 
 (* Find the fields to initialize in a composite. *)
-let rec fieldsToInit
+let rec fieldsToInit ?(inner=false)
     (comp: compinfo)
     (designator: string option)
     : fieldinfo list =
@@ -2320,14 +2320,14 @@ let rec fieldsToInit
     | Some fn ->
         let rec loop = function
         | [] ->
-          E.s (error "Cannot find designated field %s" fn)
+          if not inner then E.s (error "Cannot find designated field %s" fn) else raise Not_found
         | (f :: _) as nextflds when f.fname = fn -> nextflds
         | (f :: rest) as nextflds when prefix annonCompFieldName f.fname ->
           begin
             match unrollType f.ftype with
             | TComp (ci, _) ->
               (try
-                let _ = fieldsToInit ci (Some fn) in
+                let _ = fieldsToInit ~inner:true ci (Some fn) in
                 nextflds
               with _ ->
                 loop rest)
