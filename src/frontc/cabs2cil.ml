@@ -2340,13 +2340,6 @@ let integerArrayLength (leno: exp option) : int =
                d_exp len)
   end
 
-(* sm: I'm sure something like this already exists, but ... *)
-let isNone (o : 'a option) : bool =
-  match o with
-  | None -> true
-  | Some _ -> false
-
-
 let annonCompFieldNameId = ref 0
 let annonCompFieldName = "__annonCompField"
 
@@ -5364,7 +5357,7 @@ and doInit
 	  (* ISO 6.7.8 para 14: final NUL added only if no size specified, or
 	     if there is room for it; btw, we can't rely on zero-init of
 	     globals, since this array might be a local variable *)
-          if ((isNone leno) || ((String.length s) < (integerArrayLength leno)))
+          if ((Option.is_none leno) || ((String.length s) < (integerArrayLength leno)))
             then ref [init Int64.zero]
             else ref []
         in
@@ -5426,7 +5419,7 @@ and doInit
 	  (* ISO 6.7.8 para 14: final NUL added only if no size specified, or
 	     if there is room for it; btw, we can't rely on zero-init of
 	     globals, since this array might be a local variable *)
-          if ((isNone leno) || ((List.length s) < (integerArrayLength leno)))
+          if ((Option.is_none leno) || ((List.length s) < (integerArrayLength leno)))
             then [init Int64.zero]
             else [])
 (*
