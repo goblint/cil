@@ -1,3 +1,4 @@
+#include "testharness.h"
 typedef union
 {
     struct
@@ -39,6 +40,77 @@ typedef struct {
 
 b c = { .a = 0 };
 
-int main(int i) {
-  return 5;
+struct S1 {
+    struct {
+        int a;
+        int x;
+    };
+
+    struct {
+        int b;
+        int y;
+    };
+
+    struct {
+        int c;
+        int z;
+    };
+} s1 = {
+    .a = 1,
+    .b = 2,
+    .c = 3,
+    .x = 100,
+    .y = 101,
+    .z = 102
+};
+
+struct S2 {
+    union {
+        int a;
+        int b;
+    };
+
+    union {
+        struct {
+            int c;
+            int d;
+        };
+
+        struct {
+            int e;
+            int f;
+        };
+    };
+} s2 = {
+    .b = 100,
+    .c = 500,
+    .d = 600
+};
+
+struct S2 s2_2 = {
+    .a = 1,
+    .e = 2,
+    .f = 3
+};
+
+
+
+
+int main() {
+  if(s2.b != 100 || s2.c != 500 || s2.d != 600) {
+    E(1);
+  }
+  if(s2_2.a != 1 || s2_2.e != 2 || s2_2.f != 3) {
+    E(2);
+  }
+  if(s1.a != 1 || s1.b != 2 || s1.c != 3 || s1.x != 100 || s1.y != 101 || s1.z != 102) {
+    E(3);
+  }
+  if(c.a != 0) {
+    E(4);
+  }
+  if(v.leaf != 13) {
+    E(5);
+  }
+  SUCCESS;
 }

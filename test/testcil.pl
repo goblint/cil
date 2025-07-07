@@ -173,7 +173,7 @@ addTest("test/castcall");
 addTest("test/apachebits");
 addTest("testrun/apachebuf");
 
-addTest("test/unioninit");
+addTest("testrun/unioninit");
 
 addTest("testrun/apachefptr");
 addTest("testrun/asm1 _GNUCC=1");
