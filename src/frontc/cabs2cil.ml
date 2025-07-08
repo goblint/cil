@@ -5586,22 +5586,24 @@ and doInit
       let rec unrollDesignatorForNestedAnonymous (comp: compinfo) (designator: string) (whatnext: initwhat) =
         let own_field = List.filter (fun fld -> fld.fname = designator) comp.cfields in
         match own_field with
-          [] -> begin
-            let anonymous_compounds = List.filter_map (fun f ->
+        | fld :: _ -> (true, Some(A.INFIELD_INIT (designator, whatnext)))
+        | [] ->
+          let anonymous_compounds = List.filter_map (fun f ->
+              (* f.ftype need not be unrolled here, inner anonymous struct cannot be typdef'ed *)
               match f.ftype with
-              | TComp(compinfo, _) when prefix annonCompFieldName f.fname  -> Some(f, compinfo)
+              | TComp(compinfo, _) when prefix annonCompFieldName f.fname  -> Some (f, compinfo)
               | _ -> None
-            ) comp.cfields in
-            let anonymous_compound_inits = List.filter_map (fun (comp_field, comp) -> match unrollDesignatorForNestedAnonymous comp designator whatnext with
-              _, Some(what) -> Some(comp_field, what)
-            | _, None -> None) anonymous_compounds in
-            match anonymous_compound_inits with
-              [] -> (false, None)
-            | (comp_fld, compwhat) :: _ ->
-              (false, Some(A.INFIELD_INIT (comp_fld.fname, compwhat)))
-          end
-        | fld :: _ ->
-            (true, Some(A.INFIELD_INIT (designator, whatnext)))
+            ) comp.cfields
+          in
+          let anonymous_compound_inits = List.filter_map (fun (comp_field, comp) ->
+              match unrollDesignatorForNestedAnonymous comp designator whatnext with
+              | _, Some(what) -> Some(comp_field, what)
+              | _, None -> None
+            ) anonymous_compounds
+          in
+          match anonymous_compound_inits with
+          | [] -> (false, None)
+          | (comp_fld, compwhat) :: _ -> (false, Some(A.INFIELD_INIT (comp_fld.fname, compwhat)))
       in
       (* Process a designator and position to the designated subobject *)
       let addressSubobj
