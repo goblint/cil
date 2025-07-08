@@ -94,6 +94,18 @@ struct S2 s2_2 = {
 };
 
 
+struct Complicated {
+    struct {
+        int a;
+    } s1;
+    struct {
+        int a;
+    };
+} c1 = {
+    .s1 = { .a = 1 },
+    .a = 2
+};
+
 
 
 int main() {
@@ -111,6 +123,9 @@ int main() {
   }
   if(v.leaf != 13) {
     E(5);
+  }
+  if(c1.a != 2 || c1.s1.a != 1) {
+    E(6);
   }
   SUCCESS;
 }
