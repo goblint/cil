@@ -5588,8 +5588,8 @@ and doInit
         match own_field with
           [] -> begin
             let anonymous_compounds = List.filter_map (fun f ->
-              match (f.fname, f.ftype) with
-                (missingFieldName, TComp(compinfo, attrs)) -> Some(f, compinfo)
+              match f.ftype with
+              | TComp(compinfo, _) when prefix annonCompFieldName f.fname  -> Some(f, compinfo)
               | _ -> None
             ) comp.cfields in
             let anonymous_compound_inits = List.filter_map (fun (comp_field, comp) -> match unrollDesignatorForNestedAnonymous comp designator whatnext with
@@ -5622,7 +5622,7 @@ and doInit
                     match unrolledWhat with
                       false, Some(unrolled) ->
                         address unrolled acc
-                    | _ -> 
+                    | _ ->
                       let toinit = fieldsToInit comp (Some fn) in
                       so.stack <- InComp(so.soOff, comp, toinit) :: so.stack;
                       normalSubobj so;
