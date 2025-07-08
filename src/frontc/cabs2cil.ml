@@ -209,8 +209,6 @@ let isVariadicListType t =
   | TBuiltin_va_list _ -> true
   | _ -> false
 
-let annonCompFieldName = "__annonCompField"
-
 (* Weimer
    multi-character character constants
    In MSCV, this code works:
@@ -2307,43 +2305,29 @@ and advanceSubobj (so: subobj) : unit =
 
 
 (* Find the fields to initialize in a composite. *)
-let rec fieldsToInit ?(inner=false)
+let fieldsToInit
     (comp: compinfo)
     (designator: string option)
     : fieldinfo list =
   (* Never look at anonymous fields *)
-  let non_anon_fields =
+  let flds1 =
     List.filter (fun f -> f.fname <> missingFieldName) comp.cfields in
-  let res =
+  let flds2 =
     match designator with
-    | None -> non_anon_fields
+      None -> flds1
     | Some fn ->
         let rec loop = function
-        | [] ->
-          if not inner then E.s (error "Cannot find designated field %s" fn) else raise Not_found
-        | (f :: _) as nextflds when f.fname = fn -> nextflds
-        | (f :: rest) as nextflds when prefix annonCompFieldName f.fname ->
-          begin
-            match unrollType f.ftype with
-            | TComp (ci, _) ->
-              (try
-                let _ = fieldsToInit ~inner:true ci (Some fn) in
-                nextflds
-              with _ ->
-                loop rest)
-            | _ -> loop rest
-          end
-        | _ :: rest -> loop rest
-      in
-      loop non_anon_fields
+            [] -> E.s (error "Cannot find designated field %s" fn)
+          | (f :: _) as nextflds when f.fname = fn -> nextflds
+          | _ :: rest -> loop rest
+        in
+        loop flds1
   in
-  if comp.cstruct then
-    res
-  else
-    (* If it is a union, we only initialize the first field *)
-    match res with
-    | [] -> []
-    | f :: _ -> [f]
+  (* If it is a union we only initialize one field *)
+  match flds2 with
+    [] -> []
+  | (f :: rest) as toinit ->
+      if comp.cstruct then toinit else [f]
 
 
 let integerArrayLength (leno: exp option) : int =
@@ -2357,7 +2341,7 @@ let integerArrayLength (leno: exp option) : int =
   end
 
 let annonCompFieldNameId = ref 0
-
+let annonCompFieldName = "__annonCompField"
 
 
 
@@ -5613,12 +5597,10 @@ and doInit
           | A.INFIELD_INIT (fn, whatnext) -> begin
               match unrollType so.soTyp with
                 TComp (comp, _) ->
-                  (
                   let toinit = fieldsToInit comp (Some fn) in
-
                   so.stack <- InComp(so.soOff, comp, toinit) :: so.stack;
                   normalSubobj so;
-                  address whatnext acc)
+                  address whatnext acc
 
               | _ -> E.s (error "Field designator %s not in a struct " fn)
           end
