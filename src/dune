@@ -17,12 +17,14 @@
  (action (run ./machdepConfigure.exe)))
 
 (rule
- (target domain.ml)
- (deps domain.ocaml4.ml)
+ (targets domain.ml domain.mli)
+ (deps domain.ocaml4.ml domain.ocaml4.mli)
  (enabled_if (< %{ocaml_version} 5.0))
  (action
   (progn
-   (copy domain.ocaml4.ml domain.ml))))
+   (copy domain.ocaml4.ml domain.ml)
+   (copy domain.ocaml4.mli domain.mli)
+   )))
 
 (rule
  (deps machdep-config.h machdep-ml.c)
