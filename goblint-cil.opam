@@ -42,7 +42,6 @@ depends: [
   "conf-perl"
   "cppo"
   "conf-gcc"
-  "domain_shims"
 ]
 conflicts: ["cil"]
 build: [

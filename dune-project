@@ -35,7 +35,6 @@ This is a fork of the 'cil' package used for 'goblint'. Major changes include:
     conf-perl
     cppo
     conf-gcc
-    domain_shims
   )
   (conflicts cil) ; only because we both install the cilly executable
 )

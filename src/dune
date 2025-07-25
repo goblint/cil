@@ -3,7 +3,7 @@
 (library
   (public_name goblint-cil)
   (name goblintCil)
-  (libraries zarith unix str stdlib-shims domain_shims)
+  (libraries zarith unix str stdlib-shims)
   (modules (:standard \ main mainFeature ciloptions machdepConfigure machdepArchConfigure modelConfigure))
 )
 
@@ -15,6 +15,14 @@
 (rule
  (target machdep-config.h)
  (action (run ./machdepConfigure.exe)))
+
+(rule
+ (target domain.ml)
+ (deps domain.ocaml4.ml)
+ (enabled_if (< %{ocaml_version} 5.0))
+ (action
+  (progn
+   (copy domain.ocaml4.ml domain.ml))))
 
 (rule
  (deps machdep-config.h machdep-ml.c)
