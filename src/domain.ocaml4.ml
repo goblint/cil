@@ -52,14 +52,14 @@ module Domain = struct
 
   module DLS : DLSS = struct
     type 'a key = {
-      value: 'a option ref;
+      mutable value: 'a option;
       initialiser: unit -> 'a;
     }
 
     let new_key ?split_from_parent initialiser =
       { value = None; initialiser }
 
-    let get k =
+    let get (k: 'a key) =
       match k.value with
       | Some v -> v
       | None ->
