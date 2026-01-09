@@ -555,6 +555,7 @@ addTest("testrungcc/builtin_object_size _GNUCC=1 OPTIMIZE=1");
 addTest("testrun/builtin4 ");
 addTest("test/builtin5 ");
 addTest("test/builtin6 ");
+addTest("testrun/builtin_bswap_const ");
 addTest("test/sync-1 _GNUCC=1");
 addTest("test/sync-2 _GNUCC=1");
 addTest("test/sync-3 _GNUCC=1");
