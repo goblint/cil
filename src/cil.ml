@@ -2956,7 +2956,7 @@ let initGccBuiltins () : unit =
     try
       assert (sizeInBits mod 8 = 0);
       let sizeInBytes = sizeInBits / 8 in
-      let sizedIntType = TInt (intKindForSize sizeInBytes false, []) in
+      let sizedIntType = TInt (intKindForSize sizeInBytes true, []) in
       let name = Printf.sprintf "__builtin_bswap%d" sizeInBits in
       H.add h name (sizedIntType, [ sizedIntType ], false)
     with Not_found ->
