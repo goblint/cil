@@ -2358,6 +2358,7 @@ and intOfAttrparam (a:attrparam) : int option =
     match a with
       AInt(n) -> n
     | ABinOp(Shiftlt, a1, a2) -> (doit a1) lsl (doit a2)
+    | ABinOp(Mult, a1, a2) -> (doit a1) * (doit a2)
     | ABinOp(Div, a1, a2) -> (doit a1) / (doit a2)
     | ASizeOf(t) ->
         let bs = bitsSizeOf t in

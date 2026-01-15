@@ -225,6 +225,7 @@ addTest("test/attr10 _GNUCC=1");
 addTest("test/attr11 _GNUCC=1");
 addTest("test/attr12 _GNUCC=1");
 addTest("test/attr13 _GNUCC=1");
+addTest("test/attr-multiplication");
 # addTest("test/attr-assign"); # TODO: only on OSX, Linux GCC errors on introduced
 # addTest("test/attr-enumerator"); # TODO: only on OSX, Linux GCC errors on introduced
 addTest("testrun/packed _GNUCC=1 WARNINGS_ARE_ERRORS=1");
@@ -551,10 +552,12 @@ addTest("testrun/builtin ");
 addTest("test/builtin2 ");
 addTest("testrun/builtin3 ");
 addTest("testrun/builtin_choose_expr");
+addTest("test/builtin_choose_expr2");
 addTest("testrungcc/builtin_object_size _GNUCC=1 OPTIMIZE=1");
 addTest("testrun/builtin4 ");
 addTest("test/builtin5 ");
 addTest("test/builtin6 ");
+addTest("testrun/builtin_clzll ");
 addTest("testrun/builtin_bswap_const ");
 addTest("test/sync-1 _GNUCC=1");
 addTest("test/sync-2 _GNUCC=1");

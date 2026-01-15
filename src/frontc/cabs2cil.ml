@@ -4459,7 +4459,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                   the castTo do this work. This was necessary for
                   test/small1/union5, in which a transparent union is passed
                   as an argument *)
-              let (sa, a', att) = force_right_to_left_evaluation (doExp false a (AExp None)) in
+              let (sa, a', att) = force_right_to_left_evaluation (doExp asconst a (AExp None)) in
               let (_, a'') = castTo ~kind:Implicit att at a' in (* C11 6.5.2.2.7 *)
               (sa :: ss, a'' :: args')
             | ([], args) -> (* No more types *)
@@ -4469,7 +4469,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                 | [] -> ([], [])
                 | a :: args ->
                     let (ss, args') = loop args in
-                    let (sa, a', at) = force_right_to_left_evaluation (doExp false a (AExp None)) in
+                    let (sa, a', at) = force_right_to_left_evaluation (doExp asconst a (AExp None)) in
                     if isBuiltinChooseExprOrTgmath then
                       (* This built-in function is analogous to the `? :'
                           operator in C, except that the expression returned
@@ -4751,6 +4751,22 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                           pres := integer 0;
                           prestype := intType
                   | _ -> ignore (warn "Invalid call to builtin_types_compatible_p");
+                end
+              else if fv.vname = "__builtin_clzll" && asconst && isEmpty (!prechunk ()) then
+                begin
+                (* Constant-fold the argument and see if it is a constant *)
+                  let countLeadingZeros (arg: cilint) pos = pos - Z.numbits arg
+                  in
+                  match !pargs with
+                    [ arg ] -> begin
+                      match constFold true arg with
+                        (Const CInt (arg, kind, _)) ->
+                          piscall := false;
+                          pres := integer (countLeadingZeros arg 64);
+                          prestype := intType
+                      | _ -> ()
+                    end
+                  | _ -> ignore (warn "Invalid call to __builtin_clzll");
                 end
               else if fv.vname = "__builtin_bswap16" && asconst && isEmpty (!prechunk ()) then (* to support pure switch cases in Linux kernel *)
                 begin
