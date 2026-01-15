@@ -4752,22 +4752,20 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                           prestype := intType
                   | _ -> ignore (warn "Invalid call to builtin_types_compatible_p");
                 end
-              else if fv.vname = "__builtin_bswap16" then
+              else if fv.vname = "__builtin_bswap16" && asconst && isEmpty (!prechunk ()) then (* to support pure switch cases in Linux kernel *)
                 begin
                   match !pargs with
-                    [ arg ] -> begin
-                      if asconst && isEmpty (!prechunk ()) then ( (* to support pure switch cases in Linux kernel *)
-                        piscall := false;
-                        prestype := TInt (IUShort, []); (* TODO: lookup via machdep? *)
-                        let arg = CastE (IntegerPromotion, intType, arg) in (* bitwise operators will promote uint16 to int *) (* TODO: consider machdep? *)
-                        pres :=
-                          CastE (Internal, !prestype, (* force promoted int back to uint16 *)
-                            BinOp (BOr,
-                              BinOp (Shiftlt, arg, integer 8, intType),
-                              BinOp (Shiftrt, arg, integer 8, intType),
-                            intType)
-                          );
-                      )
+                  | [ arg ] -> begin
+                      piscall := false;
+                      prestype := TInt (IUShort, []); (* TODO: lookup via machdep? *)
+                      let arg = CastE (IntegerPromotion, intType, arg) in (* bitwise operators will promote uint16 to int *) (* TODO: consider machdep? *)
+                      pres :=
+                        CastE (Internal, !prestype, (* force promoted int back to uint16 *)
+                          BinOp (BOr,
+                            BinOp (Shiftlt, arg, integer 8, intType),
+                            BinOp (Shiftrt, arg, integer 8, intType),
+                          intType)
+                        );
                     end
                   | _ ->
                     ignore (warn "Invalid call to builtin_bswap16");
