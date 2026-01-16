@@ -111,7 +111,7 @@ class usedDefsCollectorClass = object(self)
 
   method! vinst i =
     let handle_inst iosh i = match i with
-      Call(_,ce,el,_,_) when not (!callHasNoSideEffects i) ->
+     | Call(_,ce,el,_,_) when not (!callHasNoSideEffects i) ->
 	List.iter (fun e ->
 	  let u = UD.computeUseExp e in
 	  UD.VS.iter (fun vi ->

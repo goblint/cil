@@ -244,6 +244,26 @@ let transformOffsetOf (speclist, dtype) member =
       queue;
     Buffer.contents buffer
 
+  (* this makes sure that the labels are only allowed when goto annotation was provided *)
+  let checkAsm asm =
+    let labels_no_goto = "labels provided in inline asm without goto attribute" in
+    let goto_no_labels = "expected non-empty labels list in asm goto" in
+    (match asm with
+    | ASM (attrs, _, details, _) ->
+      (match details, (List.assoc_opt "goto" attrs) with
+      | None, Some _ ->
+        parse_error goto_no_labels;
+        raise Parsing.Parse_error
+      | Some details, Some _ when details.agotos = [] ->
+        parse_error goto_no_labels;
+        raise Parsing.Parse_error
+      | Some details, None when details.agotos <> [] ->
+        parse_error labels_no_goto;
+        raise Parsing.Parse_error
+      | _, _ -> ())
+    | _ -> failwith "called checkAsm on non-ASM variant");
+    asm
+
 %}
 
 %token <string * Cabs.cabsloc> IDENT
@@ -983,7 +1003,7 @@ statement_no_null:
 |   GOTO STAR comma_expression SEMICOLON
                                  { COMPGOTO (smooth_expression (fst $3), joinLoc $1 $4) }
 |   ASM asmattr LPAREN asmtemplate asmoutputs RPAREN SEMICOLON
-                        { ASM ($2, $4, $5, joinLoc $1 $7) }
+                        { checkAsm (ASM ($2, $4, $5, joinLoc $1 $7)) }
 |   error location   SEMICOLON   { (NOP $2)}
 ;
 
