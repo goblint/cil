@@ -232,6 +232,7 @@ addTest("testrun/packed _GNUCC=1 WARNINGS_ARE_ERRORS=1");
 addTest("test/packed2 _GNUCC=1");
 addTest("test/bitfield");
 addTest("testrun/bitfield3");
+addTest("testrunc11/bitfield4");
 
 addTest("testrun/bitfield2");
 addTest("testrun/call2 ");
