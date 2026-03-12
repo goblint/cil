@@ -471,6 +471,7 @@ addTest("testrun/return1 ");
 addTest("testrun/for1 ");
 addTest("testrun/void _GNUCC=1");
 addTest("test/voidtypedef ");
+addTest("testrun/typedef_varname ");
 addTest("testrun/wrongnumargs ");
 addBadComment("testrun/wrongnumargs",
                         "Notbug. Should fail since we don't pad argument lists");
