@@ -4047,13 +4047,8 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | A.UNARY(A.MINUS, e) ->
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
-          let tres = integralPromotionE e' t in
-          let fallback = UnOp(Neg, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
-          let e'' =
-            match e', tres with
-            | Const(CInt(i, _, _)), TInt(ik, _) -> const_if_not_overflow fallback ik (neg_cilint i)
-            | _ -> fallback
-          in
+          let tres = integralPromotion e' t in
+          let e'' = UnOp(Neg, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
           finishExp se e'' tres
         else
           if isArithmeticType t then
