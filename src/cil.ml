@@ -1425,7 +1425,6 @@ and dropAttributes (anl: string list) (al: attributes) =
 and filterAttributes (s: string) (al: attribute list) : attribute list =
   List.filter (fun (Attr(an, _)) -> an = s) al
 
-(* sm: *)
 let hasAttribute s al =
   List.exists (fun (Attr(an, _)) -> an = s) al
 
