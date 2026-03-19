@@ -5637,10 +5637,10 @@ and doInit
    (* We have a designator *)
   | _, (what, ie) :: restil when what != A.NEXT_INIT ->
       let rec unrollDesignatorForNestedAnonymous (comp: compinfo) (designator: string) (whatnext: initwhat) =
-        let own_field = List.filter (fun fld -> fld.fname = designator) comp.cfields in
+        let own_field = List.find_opt (fun fld -> fld.fname = designator) comp.cfields in
         match own_field with
-        | fld :: _ -> (true, Some(A.INFIELD_INIT (designator, whatnext)))
-        | [] ->
+        | Some _ -> (true, Some(A.INFIELD_INIT (designator, whatnext)))
+        | None ->
           let anonymous_compounds = List.filter_map (fun f ->
               (* f.ftype need not be unrolled here, inner anonymous struct cannot be typdef'ed *)
               match f.ftype with
