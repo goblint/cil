@@ -1359,7 +1359,7 @@ type condExpRes =
   | CENot of condExpRes
 
 (******** CASTS *********)
-let rec integralPromotion ?(width : int option = None) (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
+let rec integralPromotion ?width (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
   let int_bits = bitsSizeOf (TInt (IInt, [])) in
   match unrollType t with
     TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
