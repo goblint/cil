@@ -1359,56 +1359,41 @@ type condExpRes =
   | CENot of condExpRes
 
 (******** CASTS *********)
-let rec integralPromotion (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
-  match unrollType t with
-    TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
-  | TInt ((IShort|IUShort|IChar|ISChar|IUChar) as ik, a) ->
-      if bitsSizeOf t < bitsSizeOf (TInt (IInt, [])) || isSigned ik then
-	TInt(IInt, a)
-      else
-	TInt(IUInt, a)
-  | TInt _ -> t
-  | TEnum (ei, a) -> integralPromotion (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
-  | t -> E.s (error "integralPromotion: not expecting %a" d_type t)
-
-(* Integer promotion for bit-fields (c.f. ISO 6.3.1.1): the width of the
-   bit-field restricts the range of representable values, so a bit-field of
-   a wider type (e.g. long : 7) may still be promotable to int. *)
-let rec integralPromotionBitfield (t : typ) (width : int) : typ =
+let rec integralPromotion ?(width : int option = None) (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
   let int_bits = bitsSizeOf (TInt (IInt, [])) in
   match unrollType t with
-  | TInt (IBool, a) -> TInt (IInt, a)
+    TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
   | TInt (ik, a) ->
-      if width < int_bits then TInt (IInt, a)
-      else if width = int_bits then
+      (* For a bit-field, the effective width is the bit-field width; for a
+         regular integer, it is the storage size.  A type that fits within
+         int (or has the same width as int and is signed) promotes to int;
+         a same-width unsigned promotes to unsigned int; wider types stay. *)
+      let eff_width = match width with Some w -> w | None -> bitsSizeOf t in
+      if eff_width < int_bits then TInt (IInt, a)
+      else if eff_width = int_bits then
         if isSigned ik then TInt (IInt, a) else TInt (IUInt, a)
-      else TInt (ik, a) (* width > int_bits: no promotion *)
-  | TEnum (ei, a) -> integralPromotionBitfield (TInt (ei.ekind, a)) width
-  | t -> E.s (error "integralPromotionBitfield: not expecting %a" d_type t)
+      else t (* no promotion needed, preserve original type (possibly named) *)
+  | TEnum (ei, a) -> integralPromotion ?width (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
+  | t -> E.s (error "integralPromotion: not expecting %a" d_type t)
 
-(* If the expression is a direct bit-field lvalue, return the bit-field width;
-   otherwise return None. Used to apply bit-field-aware integer promotion.
-   Handles nested field accesses (e.g. s.inner.bf) by examining the last
-   field in the offset chain. *)
-let bitfieldWidthOfExp (e : exp) : int option =
-  let rec lastBitfieldInOffset off =
-    match off with
+(* If the lvalue ends in a bit-field access, return the bit-field width;
+   otherwise return None. Handles nested field accesses (e.g. s.inner.bf)
+   by examining the last field in the offset chain. *)
+let bitfieldWidthOfLval ((_, off) : lval) : int option =
+  let rec lastBitfieldInOffset = function
     | NoOffset -> None
     | Field (fi, NoOffset) -> fi.fbitfield
     | Field (_, sub) -> lastBitfieldInOffset sub
     | Index (_, sub) -> lastBitfieldInOffset sub
   in
-  match e with
-  | Lval (_, off) -> lastBitfieldInOffset off
-  | _ -> None
+  lastBitfieldInOffset off
 
 (* Apply integer promotion considering a possible bit-field restriction.
    If [e] is a bit-field lvalue, uses its width; otherwise falls back to
    the regular integralPromotion. *)
 let integralPromotionE (e : exp) (t : typ) : typ =
-  match bitfieldWidthOfExp e with
-  | Some width -> integralPromotionBitfield t width
-  | None -> integralPromotion t
+  let width = match e with Lval lv -> bitfieldWidthOfLval lv | _ -> None in
+  integralPromotion ?width t
 
 let defaultArgumentPromotion (t : typ) : typ = (* c.f. ISO 6.5.2.2:6 *)
   match unrollType t with
@@ -4513,9 +4498,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                     else
                       (* For bit-field arguments, apply bit-field-aware promotion
                          to get the correct effective type before default arg promotion. *)
-                      let eff_at = match bitfieldWidthOfExp a' with
-                        | Some w -> integralPromotionBitfield at w
-                        | None -> at in
+                      let eff_at = match a' with
+                        | Lval lv -> (match bitfieldWidthOfLval lv with Some w -> integralPromotion ~width:w at | None -> at)
+                        | _ -> at in
                       let promoted_type = defaultArgumentPromotion eff_at in
                       let _, a'' = castTo ~kind:DefaultArgumentPromotion at promoted_type a' in
                       (sa :: ss, a'' :: args')
@@ -5093,9 +5078,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
            integer promotions are applied and the type after promotion is used
            for association matching. For non-bit-field expressions, the type
            is NOT subject to integer promotions here. *)
-        let e_typ = match bitfieldWidthOfExp e_expr with
-          | Some w -> integralPromotionBitfield e_typ w
-          | None -> e_typ in
+        let e_typ = match e_expr with
+          | Lval lv -> (match bitfieldWidthOfLval lv with Some w -> integralPromotion ~width:w e_typ | None -> e_typ)
+          | _ -> e_typ in
         let al_compatible = List.filter (fun ((ast, adt), _) -> typ_compatible e_typ (doOnlyType ast adt)) al_nondefault in
 
         (* TODO: error when multiple compatible associations or defaults even when unused? *)
@@ -5125,10 +5110,8 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
      must account for the bit-field width, not just the base type.
      pt1/pt2 are the effectively-promoted types used for arithmetic; the
      original t1/t2 are still used as oldt in casts. *)
-  let pt1 = match bitfieldWidthOfExp e1 with
-    | Some w -> integralPromotionBitfield t1 w | None -> t1 in
-  let pt2 = match bitfieldWidthOfExp e2 with
-    | Some w -> integralPromotionBitfield t2 w | None -> t2 in
+  let pt1 = match e1 with Lval lv -> (match bitfieldWidthOfLval lv with Some w -> integralPromotion ~width:w t1 | None -> t1) | _ -> t1 in
+  let pt2 = match e2 with Lval lv -> (match bitfieldWidthOfLval lv with Some w -> integralPromotion ~width:w t2 | None -> t2) | _ -> t2 in
   let doArithmetic () =
     let tres = arithmeticConversion pt1 pt2 in
     (* Keep the operator since it is arithmetic *)

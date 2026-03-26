@@ -126,12 +126,9 @@ val convStandaloneExp: genv:(string, envdata * Cil.location) Hashtbl.t -> env:(s
 
 val currentFunctionFDEC: Cil.fundec ref
 
-(** c.f. ISO 6.3.1.1 *)
-val integralPromotion: Cil.typ -> Cil.typ
-
-(** Integer promotion for bit-fields (c.f. ISO 6.3.1.1): like
-    {!integralPromotion} but also considers the bit-field width. *)
-val integralPromotionBitfield: Cil.typ -> int -> Cil.typ
+(** c.f. ISO 6.3.1.1.  When [~width] is supplied (bit-field width in bits),
+    the promotion accounts for the narrower representable range. *)
+val integralPromotion: ?width:int -> Cil.typ -> Cil.typ
 
 (** c.f. ISO 6.3.1.8 *)
 val arithmeticConversion: Cil.typ -> Cil.typ -> Cil.typ
