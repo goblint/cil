@@ -1360,21 +1360,26 @@ type condExpRes =
 
 (******** CASTS *********)
 let rec integralPromotion ?width (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
-  let int_bits = bitsSizeOf (TInt (IInt, [])) in
-  match unrollType t with
-    TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
-  | TInt (ik, a) ->
-      (* For a bit-field, the effective width is the bit-field width; for a
-         regular integer, it is the storage size.  A type that fits within
-         int (or has the same width as int and is signed) promotes to int;
-         a same-width unsigned promotes to unsigned int; wider types stay. *)
-      let eff_width = match width with Some w -> w | None -> bitsSizeOf t in
-      if eff_width < int_bits then TInt (IInt, a)
-      else if eff_width = int_bits then
+  match width, unrollType t with
+  | _, TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
+  | None, TInt ((IShort|IUShort|IChar|ISChar|IUChar) as ik, a) ->
+      (* Standard integer promotion: types narrower than int promote to int or unsigned int *)
+      if bitsSizeOf t < bitsSizeOf (TInt (IInt, [])) || isSigned ik then
+	TInt(IInt, a)
+      else
+	TInt(IUInt, a)
+  | None, TInt _ -> t (* int, unsigned int, long, etc. are unchanged by integer promotions *)
+  | Some w, TInt ((IInt|IUInt) as ik, a) ->
+      (* Bit-field-aware integer promotion (ISO 6.3.1.1): only for int/unsigned int bit-fields.
+         The bit-field width constrains the range of representable values. *)
+      let int_bits = bitsSizeOf (TInt (IInt, [])) in
+      if w < int_bits then TInt (IInt, a)
+      else if w = int_bits then
         if isSigned ik then TInt (IInt, a) else TInt (IUInt, a)
-      else t (* no promotion needed, preserve original type (possibly named) *)
-  | TEnum (ei, a) -> integralPromotion ?width (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
-  | t -> E.s (error "integralPromotion: not expecting %a" d_type t)
+      else t
+  | Some _, TInt _ -> integralPromotion t (* other bit-field types: fall back to regular promotion *)
+  | _, TEnum (ei, a) -> integralPromotion ?width (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
+  | _, t -> E.s (error "integralPromotion: not expecting %a" d_type t)
 
 (* If the lvalue ends in a bit-field access, return the bit-field width;
    otherwise return None. Handles nested field accesses (e.g. s.inner.bf)
