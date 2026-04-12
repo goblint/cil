@@ -5967,6 +5967,8 @@ and createLocal ?allow_var_decl:(allow_var_decl=true) ((_, sto, _, _) as specs)
       let vi = makeVarInfoCabs ~isformal:false
                                ~isglobal:true
                                loc specs (newname, ndt, a) in
+      (* Mark it as pulled up from a local static variable. *)
+      vi.vattr <- Attr("goblint_cil_pulledup", []) :: vi.vattr;
       (* However, we have a problem if a real global appears later with the
          name that we have happened to choose for this one. Remember these names
          for later. *)

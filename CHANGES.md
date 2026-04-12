@@ -1,3 +1,6 @@
+## 2.1.1
+* Add attribute `goblint_cil_pulledup` to static variables pulled up from local scope to global scope (#225, #226).
+
 ## 2.1.0
 * Add cast kinds (#179, #199).
 * Add `_Static_assert` checking (#65, #209).
