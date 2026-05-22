@@ -2151,7 +2151,7 @@ let rec patchArraySizeZero t =
    (ANSI C, 6.7.8, para 22) *)
 let rec collectInitializer
     (isfield: bool)
-    (isconst: bool)
+    (asconst: bool)
     (this: preInit)
     (thistype: typ) : (init * typ) =
   if this = NoInitPre then (makeZeroInit (patchArraySizeZero thistype)), patchArraySizeZero thistype
@@ -2173,7 +2173,7 @@ let rec collectInitializer
           | _ ->
               (* unsized array case, length comes from initializers - except
                  they are forbidden inside a struct or union *)
-              if isfield && not isconst then
+              if isfield && not asconst then
                 E.s (error "non-static initialization of a flexible array member")
               else
                 (!pMaxIdx + 1,
@@ -2187,7 +2187,7 @@ let rec collectInitializer
         let rec collect (acc: (offset * init) list) (idx: int) =
           if idx = -1 then acc
           else
-            let thisi = fst (collectInitializer isfield isconst !pArray.(idx) bt)
+            let thisi = fst (collectInitializer isfield asconst !pArray.(idx) bt)
             in
             collect ((Index(integer idx, NoOffset), thisi) :: acc) (idx - 1)
         in
@@ -2205,7 +2205,7 @@ let rec collectInitializer
                   if idx > !pMaxIdx then
                     makeZeroInit f.ftype
                   else
-                    collectFieldInitializer isconst !pArray.(idx) f
+                    collectFieldInitializer asconst !pArray.(idx) f
                 in
                 (Field(f, NoOffset), thisi) :: collect (idx + 1) restf
         in
@@ -2219,7 +2219,7 @@ let rec collectInitializer
               findField (idx + 1) rest
           | f :: _ when idx = !pMaxIdx ->
               Field(f, NoOffset),
-              collectFieldInitializer isconst !pArray.(idx) f
+              collectFieldInitializer asconst !pArray.(idx) f
           | _ -> E.s (error "Can initialize only one field for union")
         in
         CompoundInit (thistype, [ findField 0 comp.cfields ]), thistype
@@ -2227,13 +2227,13 @@ let rec collectInitializer
     | _ -> E.s (unimp "collectInitializer")
 
 and collectFieldInitializer
-    (isconst: bool)
+    (asconst: bool)
     (this: preInit)
     (f: fieldinfo) : init =
   (* Do NOT rewrite type. We need to keep type incomplete for flexible array
      members in fields, and incomplete types otherwise cannot appear in a
      structure declaration. *)
-  fst (collectInitializer true isconst this f.ftype)
+  fst (collectInitializer true asconst this f.ftype)
 
 type stackElem =
     InArray of offset * typ * int * int ref (* offset of parent, base type,
@@ -3569,7 +3569,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           let envdata = H.find env n in
           match envdata with
             EnvVar vi, _ ->
-              (* if isconst &&
+              (* if asconst &&
                  not (isFunctionType vi.vtype) &&
                  not (isArrayType vi.vtype)then
                 E.s (error "variable appears in constant"); *)
@@ -3639,7 +3639,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
               + beoff + off(str))  *)
     | A.MEMBEROF (e, str) ->
         (* member of is actually allowed if we only take the address *)
-        (* if isconst then
+        (* if asconst then
           E.s (error "MEMBEROF in constant");  *)
         let (se, e', t') = doExp false e (AExp None) in
         let lv =
@@ -4936,17 +4936,17 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         let se2, e2', t2' =
           match e2 with
             A.NOTHING -> (* A GNU thing. Use e1 as e2 *)
-              doExp isconst e1 (AExp None)
-          | _ -> doExp isconst e2 (AExp None) in
+              doExp asconst e1 (AExp None)
+          | _ -> doExp asconst e2 (AExp None) in
         (* Do e3 for real *)
-        let se3, e3', t3' = doExp isconst e3 (AExp None) in
+        let se3, e3', t3' = doExp asconst e3 (AExp None) in
         (* Compute the type of the result *)
         let tresult = conditionalConversion e2' t2' e3' t3' in
         if     (isEmpty se2 || e2 = A.NOTHING)
-            && isEmpty se3 && isconst then begin
+            && isEmpty se3 && asconst then begin
           (* Use the Question. This allows Question in initializers without
             having to do constant folding  *)
-          let se1, e1', t1 = doExp isconst e1 (AExp None) in
+          let se1, e1', t1 = doExp asconst e1 (AExp None) in
           ignore (checkBool t1 e1');
           let e2'' =
             if e2 = A.NOTHING then
@@ -4965,8 +4965,8 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           match e2 with
             A.NOTHING ->
               let tmp = var (newTempVar tresult) in
-              let (se1, _, _) = doExp isconst e1 (ASet(tmp, tresult)) in
-              let (se3, _, _) = doExp isconst e3 (ASet(tmp, tresult)) in
+              let (se1, _, _) = doExp asconst e1 (ASet(tmp, tresult)) in
+              let (se3, _, _) = doExp asconst e3 (ASet(tmp, tresult)) in
               finishExp (se1 @@ ifChunk (Lval(tmp)) lu
                                   skipChunk se3)
                 (Lval(tmp))
@@ -4980,9 +4980,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                     var tmp, tresult
               in
               (* Now do e2 and e3 for real *)
-              let (se2, _, _) = doExp isconst e2 (ASet(lv, lvt)) in
-              let (se3, _, _) = doExp isconst e3 (ASet(lv, lvt)) in
-              finishExp (doCondition isconst e1 se2 se3) (Lval(lv)) tresult
+              let (se2, _, _) = doExp asconst e2 (ASet(lv, lvt)) in
+              let (se3, _, _) = doExp asconst e3 (ASet(lv, lvt)) in
+              finishExp (doCondition asconst e1 se2 se3) (Lval(lv)) tresult
         end
 *)
     end
@@ -5292,15 +5292,15 @@ and compileCondExp (asconst:bool) (ce: condExpRes) (st: chunk) (sf: chunk) : chu
 
 
 (* A special case for conditionals *)
-and doCondition (isconst: bool) (* If we are in constants, we do our best to
+and doCondition (asconst: bool) (* If we are in constants, we do our best to
                                    eliminate the conditional *)
                 (e: A.expression)
                 (st: chunk)
                 (sf: chunk) : chunk =
-  if (!Cil.removeBranchingOnConstants || isconst) && isEmpty st && isEmpty sf then
-    let se,_,_ = doExp isconst e ADrop in se
+  if (!Cil.removeBranchingOnConstants || asconst) && isEmpty st && isEmpty sf then
+    let se,_,_ = doExp asconst e ADrop in se
   else
-    compileCondExp isconst (doCondExp isconst e) st sf
+    compileCondExp asconst (doCondExp asconst e) st sf
 
 (* Returns pure expression if there exists one, None otherwise. *)
 and doPureExp ?(asconst=true) (e : A.expression) : exp option =
@@ -5348,7 +5348,7 @@ and doInitializer
 (* Consume some initializers. Watch out here. Make sure we use only
    tail-recursion because these things can be big.  *)
 and doInit
-    (isconst: bool)
+    (asconst: bool)
     (setone: offset -> exp -> unit) (* Use to announce an initializer *)
     (so: subobj)
     (acc: chunk)
@@ -5444,13 +5444,13 @@ and doInit
       let leno = integerArrayLength leno in
       so'.stack <- [InArray(so'.curOff, bt, leno, ref 0)];
       normalSubobj so';
-      let acc', initl' = doInit isconst setone so' acc charinits in
+      let acc', initl' = doInit asconst setone so' acc charinits in
       if initl' <> [] then
         ignore (warn "Too many initializers for character array %t" whoami);
       (* Advance past the array *)
       advanceSubobj so;
       (* Continue *)
-      let res = doInit isconst setone so acc' restil in
+      let res = doInit asconst setone so acc' restil in
       res
 
         (* If we are at an array of WIDE characters and the initializer is a
@@ -5511,7 +5511,7 @@ and doInit
       let leno = integerArrayLength leno in
       so'.stack <- [InArray(so'.curOff, bt, leno, ref 0)];
       normalSubobj so';
-      let acc', initl' = doInit isconst setone so' acc charinits in
+      let acc', initl' = doInit asconst setone so' acc charinits in
       if initl' <> [] then
         (* sm: see above regarding ISO 6.7.8 para 14, which is not implemented
            for wchar_t because, as far as I can tell, we don't even put in
@@ -5520,7 +5520,7 @@ and doInit
       (* Advance past the array *)
       advanceSubobj so;
       (* Continue *)
-      doInit isconst setone so acc' restil
+      doInit asconst setone so acc' restil
 
       (* If we are at an array and we see a single initializer then it must
          be one for the first element *)
@@ -5530,13 +5530,13 @@ and doInit
       so.stack <- InArray(so.soOff, bt, leno, ref 0) :: so.stack;
       normalSubobj so;
       (* Start over with the fields *)
-      doInit isconst setone so acc allinitl
+      doInit asconst setone so acc allinitl
 
     (* If we are at a composite and we see a single initializer of the same
        type as the composite then grab it all. If the type is not the same
        then we must go on and try to initialize the fields *)
   | TComp (comp, _), (A.NEXT_INIT, A.SINGLE_INIT oneinit) :: restil ->
-      let se, oneinit', t' = doExp isconst oneinit (AExp None) in
+      let se, oneinit', t' = doExp asconst oneinit (AExp None) in
       if (match unrollType t' with
              TComp (comp', _) when comp'.ckey = comp.ckey -> true
             | _ -> false)
@@ -5545,17 +5545,17 @@ and doInit
         setone so.soOff oneinit';
         (* Advance to the next subobject *)
         advanceSubobj so;
-        doInit isconst setone so (acc @@ se) restil
+        doInit asconst setone so (acc @@ se) restil
       end else begin (* Try to initialize fields *)
         let toinit = fieldsToInit comp None in
         so.stack <- InComp(so.soOff, comp, toinit) :: so.stack;
         normalSubobj so;
-        doInit isconst setone so acc allinitl
+        doInit asconst setone so acc allinitl
       end
 
      (* A scalar with a single initializer *)
   | _, (A.NEXT_INIT, A.SINGLE_INIT oneinit) :: restil ->
-      let se, oneinit', t' = doExp isconst oneinit (AExp(Some so.soTyp)) in
+      let se, oneinit', t' = doExp asconst oneinit (AExp(Some so.soTyp)) in
 (*
       ignore (E.log "oneinit'=%a, t'=%a, so.soTyp=%a\n"
            d_exp oneinit' d_type t' d_type so.soTyp);
@@ -5565,7 +5565,7 @@ and doInit
                        else oneinit');
       (* Move on *)
       advanceSubobj so;
-      doInit isconst setone so (acc @@ se) restil
+      doInit asconst setone so (acc @@ se) restil
 
 
      (* An array with a compound initializer. The initializer is for the
@@ -5577,13 +5577,13 @@ and doInit
       let leno = integerArrayLength leno in
       so'.stack <- [InArray(so'.curOff, bt, leno, ref 0)];
       normalSubobj so';
-      let acc', initl' = doInit isconst setone so' acc initl in
+      let acc', initl' = doInit asconst setone so' acc initl in
       if initl' <> [] then
         ignore (warn "Too many initializers for array %t" whoami);
       (* Advance past the array *)
       advanceSubobj so;
       (* Continue *)
-      let res = doInit isconst setone so acc' restil in
+      let res = doInit asconst setone so acc' restil in
       res
 
    (* We have a designator that tells us to select the matching union field.
@@ -5594,7 +5594,7 @@ and doInit
                                       A.SINGLE_INIT oneinit)])]
                       when not ci.cstruct ->
       (* Do the expression to find its type *)
-      let _, _, t' = doExp isconst oneinit (AExp None) in
+      let _, _, t' = doExp asconst oneinit (AExp None) in
       let tsig = typeSigNoAttrs t' in
       let rec findField = function
           [] -> E.s (error "Cannot find matching union field in cast")
@@ -5606,13 +5606,13 @@ and doInit
       (* If this is a cast from union X to union X *)
       if Util.equals tsig (typeSigNoAttrs targ)
       then
-        doInit isconst setone so acc [(A.NEXT_INIT, A.SINGLE_INIT oneinit)]
+        doInit asconst setone so acc [(A.NEXT_INIT, A.SINGLE_INIT oneinit)]
       else
         (* If this is a GNU extension with field-to-union cast find the field *)
         let fi = findField ci.cfields in
         let _ = ignore (E.log "REDO" ) in
         (* Change the designator and redo *)
-        doInit isconst setone so acc [(A.INFIELD_INIT (fi.fname, A.NEXT_INIT),
+        doInit asconst setone so acc [(A.INFIELD_INIT (fi.fname, A.NEXT_INIT),
                                        A.SINGLE_INIT oneinit)]
 
 
@@ -5633,22 +5633,22 @@ and doInit
       (* Go inside the comp *)
       so'.stack <- [InComp(so'.curOff, comp, fieldsToInit comp None)];
       normalSubobj so';
-      let acc', initl'' = doInit isconst setone so' acc initl' in
+      let acc', initl'' = doInit asconst setone so' acc initl' in
       if initl'' <> [] then
         ignore (warn "Too many initializers for structure");
       (* Advance past the structure *)
       advanceSubobj so;
       (* Continue *)
-      doInit isconst setone so acc' restil
+      doInit asconst setone so acc' restil
 
         (* A scalar with a initializer surrounded by braces *)
   | _, (A.NEXT_INIT, A.COMPOUND_INIT [(A.NEXT_INIT,
                                        A.SINGLE_INIT oneinit)]) :: restil ->
-      let se, oneinit', t' = doExp isconst oneinit (AExp(Some so.soTyp)) in
+      let se, oneinit', t' = doExp asconst oneinit (AExp(Some so.soTyp)) in
       setone so.soOff (makeCastT ~kind:Implicit ~e:oneinit' ~oldt:t' ~newt:so.soTyp); (* C11 6.7.9.11 *)
       (* Move on *)
       advanceSubobj so;
-      doInit isconst setone so (acc @@ se) restil
+      doInit asconst setone so (acc @@ se) restil
 
   | t, (A.NEXT_INIT, _) :: _ ->
       E.s (unimp "doInit: unexpected NEXT_INIT for %a\n" d_type t);
@@ -5764,11 +5764,11 @@ and doInit
                                      A.NEXT_INIT)), ie)
                 :: loop (i + 1)
             in
-            doInit isconst setone so acc (loop first)
+            doInit asconst setone so acc (loop first)
 
         | A.NEXT_INIT -> (* We have not found any RANGE *)
             let acc' = addressSubobj so what acc in
-            doInit isconst setone so acc'
+            doInit asconst setone so acc'
               ((A.NEXT_INIT, ie) :: restil)
       in
       expandRange (fun x -> x) what
