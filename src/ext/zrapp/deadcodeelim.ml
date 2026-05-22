@@ -213,7 +213,7 @@ let rec compareExp (e1: exp) (e2: exp) : bool =
   | BinOp(bop1, l1, r1, _), BinOp(bop2, l2, r2, _) ->
       bop1 = bop2 && compareExp l1 l2 && compareExp r1 r2
   | _ -> begin
-      match getInteger (constFold true e1), getInteger (constFold true e2) with
+      match getInteger (constFold ~machdep:true e1), getInteger (constFold ~machdep:true e2) with
         Some i1, Some i2 -> compare_cilint i1 i2 = 0
       | _ -> false
     end

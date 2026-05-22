@@ -657,7 +657,7 @@ let constFoldTypeVisitor = object (self)
   method! vtype t: typ visitAction =
     match t with
       TArray(bt, Some len, a) ->
-        let len' = constFold true len in
+        let len' = constFold ~machdep:true len in
         ChangeDoChildrenPost (
           TArray(bt, Some len', a),
           (fun x -> x)
@@ -1175,7 +1175,7 @@ module BlockChunk =
       (* If needed, convert e to type t, and check in case the label was too big *)
       let checkRange e =
         let e' = makeCast ~kind:Implicit ~e ~newt:t in (* C11 6.8.4.2.5 *)
-        let constFold = constFold false in
+        let constFold = constFold ~machdep:false in
         let e'' = if !lowerConstants then constFold e' else e' in
         begin match (constFold e), (constFold e'') with
               | Const(CInt(i1, _, _)), Const(CInt(i2, _, _))
@@ -1845,8 +1845,8 @@ let rec combineTypes (what: combineWhat) (oldt: typ) (t: typ) : typ =
                else
                  oldsz', sz'
              in
-             Util.equals (constFold machdep oldsz'')
-                         (constFold machdep sz'')
+             Util.equals (constFold ~machdep oldsz'')
+                         (constFold ~machdep sz'')
            in
            if checkEqualSize false then
               oldsz
@@ -2163,7 +2163,7 @@ let rec collectInitializer
           (* normal case: use array's declared length, newtype=thistype *)
           match leno with
             Some len -> begin
-              match constFold true len with
+              match constFold ~machdep:true len with
                 Const(CInt(ni, _, _)) when compare_cilint ni zero_cilint >= 0 ->
                   (cilint_to_int ni), TArray(bt,leno,at)
 
@@ -2441,10 +2441,10 @@ let suggestAnonName (nl: A.name list) =
 
 
 (** Optional constant folding of binary operations *)
-let optConstFoldBinOp (machdep: bool) (bop: binop)
+let optConstFoldBinOp ~(machdep: bool) (bop: binop)
                       (e1: exp) (e2:exp) (t: typ) =
   if !lowerConstants then
-    constFoldBinOp machdep bop e1 e2 t
+    constFoldBinOp ~machdep bop e1 e2 t
   else
     BinOp(bop, e1, e2, t)
 
@@ -2763,7 +2763,7 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
               (* constant-eval 'e' to determine tag value *)
               let e' = getIntConstExp e in
               let e'' =
-                match getInteger (constFold true e') with
+                match getInteger (constFold ~machdep:true e') with
                   Some n ->
 		                let ik = updateEnum n in
 		                if !lowerConstants then kintegerCilint ik n else e'
@@ -2948,7 +2948,7 @@ and doAttr (a: A.attribute) : attribute list =
 
               match H.find env n' with
                 EnvEnum (tag, _), _ -> begin
-                  match getInteger (constFold true tag) with
+                  match getInteger (constFold ~machdep:true tag) with
                     Some i when !lowerConstants -> AInt (cilint_to_int i)
                   |  _ -> ACons(n', [])
                 end
@@ -3145,7 +3145,7 @@ and doType (nameortype: attributeClass) (* This is AttrName if we are doing
                   if not (isIntegralType (typeOf len')) then
                     E.s (error "Array length %a does not have an integral type.")
                   else
-                    match constFold true len' with
+                    match constFold ~machdep:true len' with
                       | Const(CInt(i, ik, _)) ->
                         (* If len' is a constant, we check that the array size is non-negative *)
                         let elems = mkCilintIk ik i in
@@ -3475,7 +3475,7 @@ and getIntConstExp (aexp) : exp =
 and isIntegerConstant (aexp) : int option =
   match doExp ~asconst:true aexp (AExp None) with
     (c, e, _) when isEmpty c -> begin
-      match getInteger (constFold true e) with
+      match getInteger (constFold ~machdep:true e) with
         Some i -> Some (cilint_to_int i)
       | _ -> None
     end
@@ -4683,7 +4683,7 @@ and doExp ~(asconst: bool)   (* This expression is used as a constant *)
                   if (not (isEmpty (!prechunk ()))) then
                   (match !pargs with
                     [ ptr; typ ] -> begin
-                      match constFold true typ with
+                      match constFold ~machdep:true typ with
                       | Const (CInt (a,_,_)) when is_zero_cilint a || compare_cilint one_cilint a = 0 ->
                           piscall := false;
                           pres := kinteger !kindOfSizeOf (-1);
@@ -4707,7 +4707,7 @@ and doExp ~(asconst: bool)   (* This expression is used as a constant *)
                   (* Constant-fold the argument and see if it is a constant *)
                   match !pargs with
                     [ arg ] -> begin
-                      match constFold true arg with
+                      match constFold ~machdep:true arg with
                       | Const _ ->
                         piscall := false;
                         pres := integer 1;
@@ -4725,7 +4725,7 @@ and doExp ~(asconst: bool)   (* This expression is used as a constant *)
                   (* Constant-fold the argument and see if it is a constant *)
                   (match !pargs with
                     [ arg; e1; e2 ] -> begin
-                      match constFold true arg with
+                      match constFold ~machdep:true arg with
                       | (Const _) as x ->
                         piscall := false;
                         if isZero x then
@@ -4773,7 +4773,7 @@ and doExp ~(asconst: bool)   (* This expression is used as a constant *)
                     in
                     match !pargs with
                       [ arg ] -> begin
-                        match constFold true arg with
+                        match constFold ~machdep:true arg with
                           (Const CInt (arg, kind, _)) ->
                             piscall := false;
                             pres := integer (countLeadingZeros arg 64);
@@ -5093,13 +5093,13 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
     let tres = arithmeticConversion t1 t2 in
     (* Keep the operator since it is arithmetic *)
     tres,
-    optConstFoldBinOp false bop (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) tres
+    optConstFoldBinOp ~machdep:false bop (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) tres
   in
   let doArithmeticComp () =
     let tres = arithmeticConversion t1 t2 in
     (* Keep the operator since it is arithmetic *)
     intType,
-    optConstFoldBinOp false bop
+    optConstFoldBinOp ~machdep:false bop
       (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) intType
   in
   let doIntegralArithmetic () =
@@ -5107,7 +5107,7 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
     match tres with
       TInt _ ->
         tres,
-        optConstFoldBinOp false bop
+        optConstFoldBinOp ~machdep:false bop
           (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) tres
     | _ -> E.s (error "%a operator on a non-integer type" d_binop bop)
   in
@@ -5115,7 +5115,7 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
     (* Cast both sides to an integer *)
     let commontype = !upointType in
     intType,
-    optConstFoldBinOp false bop (makeCastT ~kind:PointerConversion ~e:e1 ~oldt:t1 ~newt:commontype)
+    optConstFoldBinOp ~machdep:false bop (makeCastT ~kind:PointerConversion ~e:e1 ~oldt:t1 ~newt:commontype)
       (makeCastT ~kind:PointerConversion ~e:e2 ~oldt:t2 ~newt:commontype) intType
   in
 
@@ -5127,7 +5127,7 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
       let t1' = integralPromotion t1 in
       let t2' = integralPromotion t2 in
       t1',
-      optConstFoldBinOp false bop (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:t1') (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:t2') t1'
+      optConstFoldBinOp ~machdep:false bop (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:t1') (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:t2') t1'
 
   | (PlusA|MinusA)
       when isArithmeticType t1 && isArithmeticType t2 -> doArithmetic ()
@@ -5136,20 +5136,20 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
         doArithmeticComp ()
   | PlusA when isPointerType t1 && isIntegralType t2 ->
       t1,
-      optConstFoldBinOp false PlusPI e1
+      optConstFoldBinOp ~machdep:false PlusPI e1
         (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion t2)) t1
   | PlusA when isIntegralType t1 && isPointerType t2 ->
       t2,
-      optConstFoldBinOp false PlusPI e2
+      optConstFoldBinOp ~machdep:false PlusPI e2
         (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:(integralPromotion t1)) t2
   | MinusA when isPointerType t1 && isIntegralType t2 ->
       t1,
-      optConstFoldBinOp false MinusPI e1
+      optConstFoldBinOp ~machdep:false MinusPI e1
         (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion t2)) t1
   | MinusA when isPointerType t1 && isPointerType t2 ->
       let commontype = t1 in
       !ptrdiffType,
-      optConstFoldBinOp false MinusPP (makeCastT ~kind:PointerConversion ~e:e1 ~oldt:t1 ~newt:commontype)
+      optConstFoldBinOp ~machdep:false MinusPP (makeCastT ~kind:PointerConversion ~e:e1 ~oldt:t1 ~newt:commontype)
                                       (makeCastT ~kind:PointerConversion ~e:e2 ~oldt:t2 ~newt:commontype) !ptrdiffType
   | (Le|Lt|Ge|Gt|Eq|Ne) when isPointerType t1 && isPointerType t2 ->
       pointerComparison e1 t1 e2 t2
@@ -5712,7 +5712,7 @@ and doInit
                   let nextidx', doidx =
                     let (doidx, idxe', _) =
                       doExp ~asconst:true idx (AExp(Some intType)) in
-                    match constFold true idxe', isNotEmpty doidx with
+                    match constFold ~machdep:true idxe', isNotEmpty doidx with
                       Const(CInt(x, _, _)), false -> cilint_to_int x, doidx
                     | _ -> E.s (error
                       "INDEX initialization designator is not a constant")
@@ -5747,7 +5747,7 @@ and doInit
             if isNotEmpty doidxs || isNotEmpty doidxe then
               E.s (error "Range designators are not constants");
             let first, last =
-              match constFold true idxs', constFold true idxe' with
+              match constFold ~machdep:true idxs', constFold ~machdep:true idxe' with
                 Const(CInt(s, _, _)),
                 Const(CInt(e, _, _)) ->
                   cilint_to_int s, cilint_to_int e
@@ -6739,7 +6739,7 @@ and assignInit (lv: lval)
     | TArray (bt, leno, at) -> begin
       match leno with
         Some len -> begin
-          match constFold true len with
+          match constFold ~machdep:true len with
             Const(CInt(ni, _, _)) when compare_cilint ni zero_cilint >= 0 ->
               (* Write any initializations in initl using one
                  instruction per element. *)
@@ -6985,7 +6985,7 @@ and doStatement (s : A.statement) : chunk =
         let (se, e', et) = doExp ~asconst:true e (AExp None) in
         if isNotEmpty se then
           E.s (error "Case statement with a non-constant");
-        caseChunk (if !lowerConstants then constFold false e' else e')
+        caseChunk (if !lowerConstants then constFold ~machdep:false e' else e')
           loc' eloc' (doStatement s)
 
     | A.CASERANGE (el, eh, s, loc, eloc) ->
@@ -6998,8 +6998,8 @@ and doStatement (s : A.statement) : chunk =
         if isNotEmpty sel || isNotEmpty seh then
           E.s (error "Case statement with a non-constant");
         caseRangeChunk
-          (if !lowerConstants then constFold false el' else el')
-          (if !lowerConstants then constFold false eh' else eh')
+          (if !lowerConstants then constFold ~machdep:false el' else el')
+          (if !lowerConstants then constFold ~machdep:false eh' else eh')
           loc' eloc' (doStatement s)
 
 

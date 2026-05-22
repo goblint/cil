@@ -2498,7 +2498,7 @@ and bitsSizeOf t =
       addTrailing max (8 * alignOf_int t)
 
   | TArray(bt, Some len, _) -> begin
-      match constFold true len with
+      match constFold ~machdep:true len with
         Const(CInt(l,lk,_)) ->
 	  let sz = mul_cilint (mkCilintIk lk l) (cilint_of_int (bitsSizeOf bt)) in
           (* Check for overflow.
@@ -2585,9 +2585,9 @@ and bitsOffset (baset: typ) (off: offset) : int * int =
     will also compute compiler-dependent expressions such as sizeof.
     See also {!constFoldVisitor}, which will run constFold on all
     expressions in a given AST node.*)
-and constFold (machdep: bool) (e: exp) : exp =
+and constFold ~(machdep: bool) (e: exp) : exp =
   match e with
-    BinOp(bop, e1, e2, tres) -> constFoldBinOp machdep bop e1 e2 tres
+    BinOp(bop, e1, e2, tres) -> constFoldBinOp ~machdep bop e1 e2 tres
   | UnOp(unop, e1, tres) -> begin
       try
         let tk =
@@ -2596,7 +2596,7 @@ and constFold (machdep: bool) (e: exp) : exp =
           | TEnum (ei, _) -> ei.ekind
           | _ -> raise Not_found (* probably a float *)
         in
-        match constFold machdep e1 with
+        match constFold ~machdep e1 with
         |  Const(CInt(i,ik,s)) -> begin
 	         let ic = mkCilintIk ik i in
             match unop with
@@ -2609,14 +2609,14 @@ and constFold (machdep: bool) (e: exp) : exp =
   end
         (* Characters are integers *)
   | Const(CChr c) -> Const(charConstToInt c)
-  | Const(CEnum (v, _, _)) -> constFold machdep v
+  | Const(CEnum (v, _, _)) -> constFold ~machdep v
   | SizeOf t when machdep -> begin
       try
         let bs = bitsSizeOf t in
         kinteger !kindOfSizeOf (bs / 8)
       with SizeOfError _ -> e
   end
-  | SizeOfE e when machdep -> constFold machdep (SizeOf (typeOf e))
+  | SizeOfE e when machdep -> constFold ~machdep (SizeOf (typeOf e))
   | SizeOfStr s when machdep -> kinteger !kindOfSizeOf (1 + String.length s)
   | AlignOf t when machdep -> kinteger !kindOfSizeOf (alignOf_int t)
   | AlignOfE e when machdep -> begin
@@ -2626,7 +2626,7 @@ and constFold (machdep: bool) (e: exp) : exp =
         Const (CStr _) ->
           kinteger !kindOfSizeOf !M.theMachine.M.alignof_str
             (* For an array, it is the alignment of the array ! *)
-      | _ -> constFold machdep (AlignOf (typeOf e))
+      | _ -> constFold ~machdep (AlignOf (typeOf e))
   end
 
   | CastE (k, it,
@@ -2636,13 +2636,13 @@ and constFold (machdep: bool) (e: exp) : exp =
         let start, width = bitsOffset bt off in
         if start mod 8 <> 0 then
           E.s (error "Using offset of bitfield");
-        constFold machdep (CastE(k, it, (kinteger !kindOfSizeOf (start / 8))))
+        constFold ~machdep (CastE(k, it, (kinteger !kindOfSizeOf (start / 8))))
       with SizeOfError _ -> e
   end
 
 
   | CastE (k, t, e) -> begin
-      match constFold machdep e, unrollType t with
+      match constFold ~machdep e, unrollType t with
         (* Might truncate silently *)
       | Const(CInt(i,k,_)), TInt(nk,a)
           (* It's okay to drop a cast to const.
@@ -2652,28 +2652,28 @@ and constFold (machdep: bool) (e: exp) : exp =
           Const(CInt(i', nk, None))
       | e', _ -> CastE (k, t, e')
   end
-  | Lval lv -> Lval (constFoldLval machdep lv)
-  | AddrOf lv -> AddrOf (constFoldLval machdep lv)
-  | StartOf lv -> StartOf (constFoldLval machdep lv)
+  | Lval lv -> Lval (constFoldLval ~machdep lv)
+  | AddrOf lv -> AddrOf (constFoldLval ~machdep lv)
+  | StartOf lv -> StartOf (constFoldLval ~machdep lv)
   | _ -> e
 
-and constFoldLval machdep (host,offset) =
+and constFoldLval ~machdep (host,offset) =
   let newhost =
     match host with
-    | Mem e -> Mem (constFold machdep e)
+    | Mem e -> Mem (constFold ~machdep e)
     | Var _ -> host
   in
-  let rec constFoldOffset machdep = function
+  let rec constFoldOffset ~machdep = function
     | NoOffset -> NoOffset
-    | Field (fi,offset) -> Field (fi, constFoldOffset machdep offset)
-    | Index (exp,offset) -> Index (constFold machdep exp,
-                                   constFoldOffset machdep offset)
+    | Field (fi,offset) -> Field (fi, constFoldOffset ~machdep offset)
+    | Index (exp,offset) -> Index (constFold ~machdep exp,
+                                   constFoldOffset ~machdep offset)
   in
-  (newhost, constFoldOffset machdep offset)
+  (newhost, constFoldOffset ~machdep offset)
 
-and constFoldBinOp (machdep: bool) bop e1 e2 tres =
-  let e1' = constFold machdep e1 in
-  let e2' = constFold machdep e2 in
+and constFoldBinOp ~(machdep: bool) bop e1 e2 tres =
+  let e1' = constFold ~machdep e1 in
+  let e2' = constFold ~machdep e2 in
   if isIntegralType tres then begin
     let newe =
       let tk =
@@ -2780,7 +2780,7 @@ let isNullPtrConstant e =
     | CastE (_, TPtr (TVoid [], []), e) -> isNullPtrConstant e (* no qualifiers allowed on void or ptr *)
     | e -> isZero e
   in
-  isNullPtrConstant (constFold true e)
+  isNullPtrConstant (constFold ~machdep:true e)
 
 let rec isConstant = function
   | Const _ -> true
@@ -5712,7 +5712,7 @@ class constFoldVisitorClass (machdep: bool) : cilVisitor = object
     | _ -> DoChildren
   method! vexpr (e: exp) =
     (* Do it bottom up *)
-    ChangeDoChildrenPost (e, constFold machdep)
+    ChangeDoChildrenPost (e, constFold ~machdep)
 
 end
 let constFoldVisitor (machdep: bool) = new constFoldVisitorClass machdep
@@ -6016,7 +6016,7 @@ let rec typeSigWithAttrs ?(ignoreSign=false) doattr t =
       let l' =
         match l with
           Some l -> begin
-            match constFold true l with
+            match constFold ~machdep:true l with
               Const(CInt(i, _, _)) -> Some i
             | e -> None (* Returning None for length in a typesig if the length is not a constant (VLA) *)
           end
@@ -6179,14 +6179,14 @@ let existsType (f: typ -> existsAction) (t: typ) : bool =
 let increm (e: exp) (i: int) =
   let et = typeOf e in
   let bop = if isPointerType et then PlusPI else PlusA in
-  constFold false (BinOp(bop, e, integer i, et))
+  constFold ~machdep:false (BinOp(bop, e, integer i, et))
 
 exception LenOfArray
 let lenOfArray (eo: exp option) : int =
   match eo with
     None -> raise LenOfArray
   | Some e -> begin
-      match constFold true e with
+      match constFold ~machdep:true e with
       | Const(CInt(ni, _, _)) when compare_cilint ni zero_cilint >= 0 ->
           cilint_to_int ni
       | e -> raise LenOfArray
@@ -6239,7 +6239,7 @@ let rec makeZeroInit (t: typ) : init =
 
   | TArray(bt, Some len, _) as t' ->
       let n =
-        match constFold true len with
+        match constFold ~machdep:true len with
           Const(CInt(n, _, _)) -> cilint_to_int n
         | _ -> E.s (E.unimp "Cannot understand length of array")
       in
@@ -6282,7 +6282,7 @@ let foldLeftCompound
       (* See how many more we have to do *)
       match leno with
         Some lene when implicit -> begin
-          match constFold true lene with
+          match constFold ~machdep:true lene with
             Const(CInt(i, _, _)) ->
               let len_array = cilint_to_int i in
               let len_init = List.length initl in
@@ -6578,7 +6578,7 @@ let caseRangeFold (l: label list) =
   | ((Case _ | Default _ | Label _) as x) :: xs -> fold (x :: acc) xs
   | CaseRange(el, eh, loc, eloc) :: xs ->
       let il, ih, ik =
-        match constFold true el, constFold true eh with
+        match constFold ~machdep:true el, constFold ~machdep:true eh with
           Const(CInt(il, ilk, _)), Const(CInt(ih, ihk, _)) ->
             mkCilintIk ilk il, mkCilintIk ihk ih, commonIntKind ilk ihk
         | _ -> E.s (error "Cannot understand the constants in case range (%a and %a)" d_exp el d_exp eh)
