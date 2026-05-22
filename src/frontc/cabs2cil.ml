@@ -5253,7 +5253,7 @@ and doCondExp ~(asconst: bool)  (* Try to evaluate the conditional expression
   | _ ->
       let (se, e, t) = doExp ~asconst e (AExp None) in
       ignore (checkBool t e);
-      CEExp (se, if !lowerConstants then constFold asconst e else e)
+      CEExp (se, if !lowerConstants then constFold asconst e else e) (* TODO: Why is asconst used as machdep? *)
 
 and compileCondExp ~(asconst:bool) (ce: condExpRes) (st: chunk) (sf: chunk) : chunk =
   match ce with
