@@ -1,3 +1,14 @@
+## 2.1.0
+* Add cast kinds (#179, #199).
+* Add `_Static_assert` checking (#65, #209).
+* Optimize `hasAttribute`, etc. (#221, #222, #223, #224).
+* Remove hardcoded unary minus constant folding in `Cabs2cil` (#216).
+* Fix unary plus integer promotion (#200).
+* Add division overflow check to modulo constant folding (#217).
+* Add impure expression support to `__auto_type` (#207).
+* Add more `__builtin_*` evaluation (#204, #205, #206).
+* Fix `for` loop component locations (#183, #211).
+
 ## 2.0.9
 * Add `__loop_condition` labels before syntactic loop conditions (#197).
 
