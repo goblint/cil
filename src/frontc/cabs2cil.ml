@@ -4787,15 +4787,16 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                   match !pargs with
                   | [ arg ] -> begin
                       piscall := false;
-                      prestype := TInt (IUShort, []); (* TODO: lookup via machdep? *)
-                      let arg = CastE (IntegerPromotion, intType, arg) in (* bitwise operators will promote uint16 to int *) (* TODO: consider machdep? *)
-                      pres :=
-                        CastE (Internal, !prestype, (* force promoted int back to uint16 *)
-                          BinOp (BOr,
-                            BinOp (Shiftlt, arg, integer 8, intType),
-                            BinOp (Shiftrt, arg, integer 8, intType),
-                          intType)
-                        );
+                      prestype := TInt (intKindForSize 2 true, []);
+                      let ipt = integralPromotion !prestype in (* arg has same type by builtins declarations *)
+                      let arg = makeCastT ~kind:IntegerPromotion ~e:arg ~oldt:!prestype ~newt:ipt in (* bitwise operators will promote uint16 to int *)
+                      let e =
+                        BinOp (BOr,
+                          BinOp (Shiftlt, arg, integer 8, ipt), (* shift has left promoted arg type *)
+                          BinOp (Shiftrt, arg, integer 8, ipt), (* shift has left promoted arg type *)
+                          ipt) (* bitwise or has arithmetic converted type (already promoted and same) *)
+                      in
+                      pres := makeCastT ~kind:Internal ~e ~oldt:ipt ~newt:!prestype (* force promoted int back to uint16 *)
                     end
                   | _ ->
                     ignore (warn "Invalid call to builtin_bswap16");
