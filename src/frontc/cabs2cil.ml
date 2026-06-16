@@ -2667,6 +2667,7 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
         if n = "" then E.s (error "Missing struct tag on incomplete struct");
         findCompType "struct" n []
     | [A.Tstruct (n, Some nglist, extraAttrs)] -> (* A definition of a struct *)
+      let nglist = doStructDecls nglist in
       let (specs, names) = List.split nglist in
       let n' =
         if n <> "" then n else anonStructName "struct" suggestedAnonName specs in
@@ -2678,6 +2679,7 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
         if n = "" then E.s (error "Missing union tag on incomplete union");
         findCompType "union" n []
     | [A.Tunion (n, Some nglist, extraAttrs)] -> (* A definition of a union *)
+        let nglist = doStructDecls nglist in
         let (specs, names) = List.split nglist in
         let n' =
           if n <> "" then n else anonStructName "union" suggestedAnonName specs in
@@ -2826,6 +2828,23 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
         E.s (error "Invalid combination of type specifiers")
   in
   bt,!storage,!isinline,List.rev (!attrs @ (convertCVtoAttr !cvattrs))
+
+
+and doStructDecls (struct_decls: struct_decl list): field_group list =
+  List.filter_map (function
+      | FIELD_GROUP fg -> Some fg
+      | FIELD_STATIC_ASSERT (e, str, loc) ->
+        let loc = convLoc loc in
+        let d_message () = function
+          | None -> nil
+          | Some str -> dprintf ": %s" str
+        in
+        begin match isIntegerConstant e with
+          | Some 0 -> E.s (error "Static assert failed at %a%a" d_loc loc d_message str)
+          | Some _ -> None
+          | None -> E.s (error "Static assert with a non-constant at %a%a" d_loc loc d_message str)
+        end
+    ) struct_decls
 
 (* given some cv attributes, convert them into named attributes for
    uniform processing *)
@@ -4009,12 +4028,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
           let tres = integralPromotion t in
-          let fallback = UnOp(Neg, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
-          let e'' =
-            match e', tres with
-            | Const(CInt(i, _, _)), TInt(ik, _) -> const_if_not_overflow fallback ik (neg_cilint i)
-            | _ -> fallback
-          in
+          let e'' = UnOp(Neg, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
           finishExp se e'' tres
         else
           if isArithmeticType t then
@@ -5660,10 +5674,9 @@ and doInit
    (* We have a designator *)
   | _, (what, ie) :: restil when what != A.NEXT_INIT ->
       let rec unrollDesignatorForNestedAnonymous (comp: compinfo) (designator: string) (whatnext: initwhat) =
-        let own_field = List.filter (fun fld -> fld.fname = designator) comp.cfields in
-        match own_field with
-        | fld :: _ -> (true, Some(A.INFIELD_INIT (designator, whatnext)))
-        | [] ->
+        if List.exists (fun fld -> fld.fname = designator) comp.cfields then
+          (true, Some(A.INFIELD_INIT (designator, whatnext)))
+        else
           let anonymous_compounds = List.filter_map (fun f ->
               (* f.ftype need not be unrolled here, inner anonymous struct cannot be typdef'ed *)
               match f.ftype with
@@ -5910,12 +5923,10 @@ and createAutoLocal ((((n, ndt, a, cloc) : A.name), (inite: A.init_expression)) 
   else
     match inite with
     | SINGLE_INIT exp ->
-      (match doPureExp exp with
-      | Some exp ->
-        let t = Cil.typeOf exp in
+      (match doExp false exp (AExp None) with (* doExp with AExp handles array and function types (AType would not!) *)
+      | (_, _, t) ->
         let specs = t,NoStorage,false,[] in
         createLocal specs name
-      | None -> E.s (error "__auto_type but init not pure")
       )
     | _ -> E.s (error "__auto_type but not SINGLE_INIT")
 (* Must catch the Static local variables. Make them global *)
@@ -6649,7 +6660,19 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
             E.s (bug "doDecl returns non-empty statement for global"))
         dl;
       empty
-  | STATIC_ASSERT _ -> empty
+  | STATIC_ASSERT (e, str, loc) ->
+    if isglobal || isstmt then
+      currentLoc := convLoc loc;
+    currentExpLoc := convLoc loc;
+    let d_message () = function
+      | None -> nil
+      | Some str -> dprintf ": %s" str
+    in
+    begin match isIntegerConstant e with
+      | Some 0 -> E.s (error "Static assert failed at %a%a" d_loc !currentLoc d_message str)
+      | Some _ -> empty
+      | None -> E.s (error "Static assert with a non-constant at %a%a" d_loc !currentLoc d_message str)
+    end
   | _ -> E.s (error "unexpected form of declaration")
 
 and doTypedef ((specs, nl): A.name_group) =
@@ -6873,24 +6896,31 @@ and doStatement (s : A.statement) : chunk =
         exitLoop ();
         loopChunk (s' @@ s'')
 
-    | A.FOR(fc1,e2,e3,s,loc,eloc) -> begin
+    | A.FOR(fc1,fc_loc,e2,e2_loc,e3,e3_loc,s,loc,eloc) -> begin
         let loc' = convLoc loc in
         let eloc' = convLoc eloc in
-        currentLoc := loc'; (* For loop statement location is not synthetic. *)
-        currentExpLoc := SynthetizeLoc.doLoc eloc';
+        let fc_loc' = convLoc fc_loc in
+        let e2_loc' = convLoc e2_loc in
+        let e3_loc' = convLoc e3_loc in
+        currentLoc := loc'; (* For loop statement location is not synthetic (see se1 comment below). *)
+        currentExpLoc := SynthetizeLoc.doLoc fc_loc';
         enterScope (); (* Just in case we have a declaration *)
         let (se1, _, _) =
           match fc1 with
             FC_EXP e1 -> doExp false e1 ADrop
-          | FC_DECL d1 -> (doDecl false false d1, zero, voidType)
+          | FC_DECL d1 -> (doDecl false false d1, zero, voidType) (* doDecl may modify currentLoc and currentExpLoc! *)
         in
         (* First instruction (assignment) in for loop initializer has non-synthetic statement location before for loop.
            Its expression location inside for loop parentheses is synthetic.
            All other instructions are fully synthetic. *)
         let se1 = SynthetizeLoc.eDoChunkHead (SynthetizeLoc.doChunkTail se1) in
-        let (se3, _, _) = doExp false e3 ADrop in
-        let se3 = SynthetizeLoc.doChunkHead se3 in
+        (* Reset both locations due to doDecl (see above). *)
+        currentLoc := loc'; (* TODO: Why is statement location not synthetic here? Not needed? *)
+        currentExpLoc := SynthetizeLoc.doLoc e3_loc';
+        let (se3, _, _) = doExp false e3 ADrop in (* doExp does doChunkTail *)
+        let se3 = SynthetizeLoc.doChunkHead se3 in (* So just doChunkHead is enough *)
         startLoop false;
+        (* TODO: Are these locations ever used in doStatement? Why not synthetic? *)
         currentLoc := loc';
         currentExpLoc := eloc';
         let s' = doStatement s in
@@ -6900,6 +6930,8 @@ and doStatement (s : A.statement) : chunk =
         let break_cond = breakChunk loc' in (* TODO: use eloc'? *)
         exitLoop ();
         let res =
+          currentLoc := SynthetizeLoc.doLoc loc';
+          currentExpLoc := SynthetizeLoc.doLoc e2_loc';
           match e2 with
             A.NOTHING -> (* This means true *)
               se1 @@ loopChunk (consLabLoopCondition s' @@ s'')

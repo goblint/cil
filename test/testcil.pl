@@ -537,6 +537,8 @@ addTest("testrun/min ");
 
 
 addTest("testrun/typeof1 ");
+addTest("test/auto_type1");
+addTest("testrun/auto_type2");
 addTest("testrun/semicolon _GNUCC=1");
 
 addTest("merge-ar ");
@@ -741,6 +743,9 @@ addTest("testrunc11/c11-noreturn");
 addTest("testrunc11/c11-atomic");
 addTest("testrunc11/c11-atomic-store");
 addTest("testrunc11/c11-static-assert");
+addTestFail("testrunc11/c11-static-assert-fail1", "Global _Static_assert fails");
+addTestFail("testrunc11/c11-static-assert-fail2", "Local _Static_assert fails");
+addTestFail("testrunc11/c11-static-assert-fail3", "Struct _Static_assert fails");
 addTest("testrunc11/c11-align-of");
 addTest("testrunc11/gcc-c11-generic-1");
 # TODO: these messages are not even checked?

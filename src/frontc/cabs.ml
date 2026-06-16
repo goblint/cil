@@ -83,8 +83,8 @@ type typeSpecifier = (* Merge all specifiers into one type *)
      a forward declaration or simple reference to the type); they
      also have a list of __attribute__s that appeared between the
      keyword and the type name (definitions only) *)
-  | Tstruct of string * field_group list option * attribute list
-  | Tunion of string * field_group list option * attribute list
+  | Tstruct of string * struct_decl list option * attribute list
+  | Tunion of string * struct_decl list option * attribute list
   | Tenum of string * enum_item list option * attribute list
   | TtypeofE of expression                      (* GCC __typeof__ *)
   | TtypeofT of specifier * decl_type       (* GCC __typeof__ *)
@@ -150,6 +150,10 @@ and name_group = specifier * name list
 (* The optional expression is the bitfield *)
 and field_group = specifier * (name * expression option) list
 
+and struct_decl =
+  | FIELD_GROUP of field_group
+  | FIELD_STATIC_ASSERT of expression * string option * cabsloc
+
 (* like name_group, except the declared variables are allowed to have initializers *)
 (* e.g.: int x=1, y=2; *)
 and init_name_group = specifier * init_name list
@@ -187,7 +191,7 @@ and definition =
  | TRANSFORMER of definition * definition list * cabsloc
  (* expression transformer: source and destination *)
  | EXPRTRANSFORMER of expression * expression * cabsloc
- | STATIC_ASSERT of expression * string * cabsloc
+ | STATIC_ASSERT of expression * string option * cabsloc
 
 
 (* the string is a file name, and then the list of toplevel forms *)
@@ -221,7 +225,8 @@ and statement =
  | IF of expression * statement * statement * cabsloc * cabsloc (* second cabsloc is just for expression *)
  | WHILE of expression * statement * cabsloc * cabsloc (* second cabsloc is just for expression *)
  | DOWHILE of expression * statement * cabsloc * cabsloc (* second cabsloc is just for expression *)
- | FOR of for_clause * expression * expression * statement * cabsloc * cabsloc (* second cabsloc is just for expression *)
+ | FOR of for_clause * cabsloc * expression * cabsloc * expression * cabsloc * statement * cabsloc * cabsloc
+   (* for_clause, for_clause_loc, condition, condition_loc, increment, increment_loc, body, loop_loc, expr_loc *)
  | BREAK of cabsloc
  | CONTINUE of cabsloc
  | RETURN of expression * cabsloc * cabsloc (* second cabsloc is just for expression *)
