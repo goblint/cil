@@ -1691,12 +1691,12 @@ val charConstToInt: char -> constant
     will also compute compiler-dependent expressions such as sizeof.
     See also {!constFoldVisitor}, which will run constFold on all
     expressions in a given AST node.*)
-val constFold: bool -> exp -> exp
+val constFold: machdep:bool -> exp -> exp
 
 (** Do constant folding on a binary operation. The bulk of the work done by
     [constFold] is done here. If the first argument is true then
     will also compute compiler-dependent expressions such as sizeof *)
-val constFoldBinOp: bool -> binop -> exp -> exp -> typ -> exp
+val constFoldBinOp: machdep:bool -> binop -> exp -> exp -> typ -> exp
 
 (** Increment an expression. Can be arithmetic or pointer type *)
 val increm: exp -> int -> exp

@@ -516,7 +516,7 @@
            | None, None -> oldsz
            | Some oldsz', Some sz' ->
                let samesz =
-                 match (constFold true oldsz', constFold true sz') with
+                 match (constFold ~machdep:true oldsz', constFold ~machdep:true sz') with
                  | Const (CInt (oldi, _, _)), Const (CInt (i, _, _)) ->
                      Cilint.compare_cilint oldi i = 0
                  | _, _ -> false
@@ -707,7 +707,7 @@
            if old_attrs <> attrs then
              raise (Failure "(different enumerator attributes)");
            let samev =
-             match (constFold true old_iv, constFold true iv) with
+             match (constFold ~machdep:true old_iv, constFold ~machdep:true iv) with
              | Const (CInt (oldi, _, _)), Const (CInt (i, _, _)) ->
                  Cilint.compare_cilint oldi i = 0
              | _ -> false

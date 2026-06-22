@@ -60,7 +60,7 @@ let rec compareExp (e1: exp) (e2: exp) : bool =
   | CastE(k1, t1, e1), CastE(k2, t2, e2) ->
       k1 = k2 && t1 == t2 && compareExp e1 e2
   | _ -> begin
-      match getInteger (constFold true e1), getInteger (constFold true e2) with
+      match getInteger (constFold ~machdep:true e1), getInteger (constFold ~machdep:true e2) with
         Some i1, Some i2 -> compare_cilint i1 i2 = 0
       | _ -> false
     end

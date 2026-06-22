@@ -639,7 +639,7 @@ and checkInit  (i: init) : typ =
                 match elen with
                 | None -> 0L
                 | Some e -> (ignore (checkExp true e);
-                match getInteger (constFold true e) with
+                match getInteger (constFold ~machdep:true e) with
                   Some len -> Z.to_int64 len (* Z on purpose, we don't want to ignore overflows here *)
                 | None ->
                     ignore (warn "Array length is not a constant");
