@@ -6450,7 +6450,7 @@ class copyFunctionVisitor (newname: string) = object (self)
             (* Make a copy of the reference *)
             let gotos' = List.map (fun sr -> ref (findStmt !sr.sid)) gotos in
             s.skind <- Asm(attr, template, outs, ins, clobbers, gotos', loc)
-        | _ -> ()
+        | _ -> assert false
       in
       List.iter patchstmt !patches;
       f'
