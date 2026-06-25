@@ -244,13 +244,26 @@ and print_decl (n: string) = function
       comprint ")"
 
 
-and print_fields (flds : field_group list) =
+and print_fields (flds : struct_decl list) =
   if flds = [] then print " { } "
   else begin
     print " {";
     indent ();
     List.iter
-      (fun fld -> print_field_group fld; print ";"; new_line ())
+      (function
+        | FIELD_GROUP fld -> print_field_group fld; print ";"; new_line ()
+        | FIELD_STATIC_ASSERT (e, str, loc) ->
+          print "_Static_assert(";
+          print_expression e;
+          begin match str with
+            | Some str ->
+              print ",";
+              print_string str;
+            | None -> ()
+          end;
+          print ");";
+          new_line ()
+      )
       flds;
     unindent ();
     print "} "
@@ -633,7 +646,7 @@ and print_statement stat =
       print_expression_level 0 exp;
       print ");";
       new_line ();
-  | FOR (fc1, exp2, exp3, stat, loc, eloc) ->
+  | FOR (fc1, _, exp2, _, exp3, _, stat, loc, eloc) ->
       setLoc(loc);
       printl ["for";"("];
       (match fc1 with
@@ -912,8 +925,12 @@ and print_def def =
       setLoc(loc);
       print "_Static_assert(";
       print_expression e;
-      print ",";
-      print_string str;
+      begin match str with
+        | Some str ->
+          print ",";
+          print_string str;
+        | None -> ()
+      end;
       print ");";
 
 (* sm: print a comment if the printComments flag is set *)

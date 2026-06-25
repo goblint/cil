@@ -382,7 +382,7 @@ let transformOffsetOf (speclist, dtype) member =
 
 %type <spec_elem list * cabsloc> decl_spec_list
 %type <typeSpecifier * cabsloc> type_spec
-%type <Cabs.field_group list> struct_decl_list
+%type <Cabs.struct_decl list> struct_decl_list
 
 
 %type <Cabs.name> old_proto_decl
@@ -396,6 +396,7 @@ let transformOffsetOf (speclist, dtype) member =
 %type <Cabs.statement list> block_element_list
 %type <string list> local_labels local_label_names
 %type <string list> old_parameter_list_ne
+%type <Cabs.for_clause * cabsloc> for_clause
 
 %type <Cabs.init_name> init_declarator
 %type <Cabs.init_name list> init_declarator_list
@@ -964,9 +965,9 @@ statement_no_null:
 	        	{WHILE (smooth_expression (fst $2), $4, joinLoc $1 $5, joinLoc (snd $2) $3)}
 |   DO statement WHILE paren_comma_expression SEMICOLON
 	        	         {DOWHILE (smooth_expression (fst $4), $2, joinLoc $1 $5, joinLoc (snd $4) $5)}
-|   FOR LPAREN for_clause opt_expression
-	        SEMICOLON opt_expression RPAREN statement location
-	                         {FOR ($3, $4, $6, $8, joinLoc $1 $9, joinLoc $2 $7)}
+|   FOR LPAREN for_clause location opt_expression location
+	        SEMICOLON location opt_expression location RPAREN statement location
+	                         {let (fc, fc_loc) = $3 in FOR (fc, fc_loc, $5, joinLoc $4 $6, $9, joinLoc $8 $10, $12, joinLoc $1 $13, joinLoc $2 $11)}
 |   IDENT COLON attribute_nocv_list location statement_no_null
 		                 {(* The only attribute that should appear here
                                      is "unused". For now, we drop this on the
@@ -1001,8 +1002,8 @@ statement_no_null:
 
 
 for_clause:
-    opt_expression SEMICOLON     { FC_EXP $1 }
-|   declaration                  { FC_DECL $1 }
+    location opt_expression SEMICOLON     { (FC_EXP $2, joinLoc $1 $3) }
+|   location declaration location         { (FC_DECL $2, joinLoc $1 $3) }
 ;
 
 declaration:                                /* ISO 6.7.*/
@@ -1010,18 +1011,18 @@ declaration:                                /* ISO 6.7.*/
                                        { doDeclaration (joinLoc (snd $1) $3) (fst $1) $2 }
 |   decl_spec_list_no_attr_only SEMICOLON
                                        { doDeclaration (joinLoc (snd $1) $2) (fst $1) [] }
-|   static_assert_declaration          { let (e, m, loc) = $1 in STATIC_ASSERT (e, m, loc) }
+|   static_assert_declaration SEMICOLON { let (e, m, loc) = $1 in STATIC_ASSERT (e, m, loc) }
 ;
 
 static_assert_declaration:
 
 |   STATIC_ASSERT LPAREN expression RPAREN /* C23 */
       {
-        (fst $3, "", $1)
+        (fst $3, None, $1)
       }
 |   STATIC_ASSERT LPAREN expression COMMA const_raw_string RPAREN
       {
-        (fst $3, fst $5, $1)
+        (fst $3, Some (fst $5), $1)
       }
 ;
 
@@ -1160,13 +1161,13 @@ struct_decl_list: /* (* ISO 6.7.2. Except that we allow empty structs. We
                    */
    /* empty */                           { [] }
 |  decl_spec_list                 SEMICOLON struct_decl_list
-                                         { (fst $1,
+                                         { FIELD_GROUP (fst $1,
                                             [(missingFieldDecl, None)]) :: $3 }
 /*(* GCC allows extra semicolons *)*/
 |                                 SEMICOLON struct_decl_list
                                          { $2 }
 |  decl_spec_list field_decl_list SEMICOLON struct_decl_list
-                                          { (fst $1, $2)
+                                          { FIELD_GROUP (fst $1, $2)
                                             :: $4 }
 /*(* MSVC allows pragmas in strange places *)*/
 |  pragma struct_decl_list                { $2 }
@@ -1174,12 +1175,9 @@ struct_decl_list: /* (* ISO 6.7.2. Except that we allow empty structs. We
 |  error                          SEMICOLON struct_decl_list
                                           { $3 }
 /*(* C11 allows static_assert-declaration *)*/
-|  static_assert_declaration             {
-       []
-   }
-
 |  static_assert_declaration      SEMICOLON struct_decl_list  {
-       $3
+       let (e, m, loc) = $1 in
+       FIELD_STATIC_ASSERT (e, m, loc) :: $3
    }
 
 ;

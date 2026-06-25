@@ -189,13 +189,22 @@ and childrenTypeSpecifier vis ts =
     let nel' = mapNoCopy doOneField nel in
     if s' != s || nel' != nel then (s', nel') else input
   in
+  let childrenStructDecl input =
+    match input with
+    | FIELD_GROUP fg -> 
+      let fg' = childrenFieldGroup fg in
+      if fg' != fg then FIELD_GROUP fg' else input
+    | FIELD_STATIC_ASSERT (e, str, l) ->
+      let e' = visitCabsExpression vis e in
+      if e' != e then FIELD_STATIC_ASSERT (e', str, l) else input
+  in
   match ts with
     Tstruct (n, Some fg, extraAttrs) ->
       (*(trace "sm" (dprintf "visiting struct %s\n" n));*)
-      let fg' = mapNoCopy childrenFieldGroup fg in
+      let fg' = mapNoCopy childrenStructDecl fg in
       if fg' != fg then Tstruct( n, Some fg', extraAttrs) else ts
   | Tunion (n, Some fg, extraAttrs) ->
-      let fg' = mapNoCopy childrenFieldGroup fg in
+      let fg' = mapNoCopy childrenStructDecl fg in
       if fg' != fg then Tunion( n, Some fg', extraAttrs) else ts
   | Tenum (n, Some ei, extraAttrs) ->
       let doOneEnumItem ((s, attrs, e, loc) as ei) =
@@ -321,7 +330,9 @@ and childrenDefinition vis d =
       let dl' = mapNoCopyList (visitCabsDefinition vis) dl in
       if dl' != dl then LINKAGE (n, l, dl') else d
   
-  | STATIC_ASSERT _ -> d
+  | STATIC_ASSERT (e, str, l) ->
+    let e' = visitCabsExpression vis e in
+    if e' != e then STATIC_ASSERT (e', str, l) else d
   | TRANSFORMER _ -> d
   | EXPRTRANSFORMER _ -> d
 
@@ -372,7 +383,7 @@ and childrenStatement vis s =
       let e' = ve e in
       let s1' = vs l s1 in
       if e' != e || s1' != s1 then DOWHILE (e', s1', l, el) else s
-  | FOR (fc1, e2, e3, s4, l, el) ->
+  | FOR (fc1, fc_loc, e2, e2_loc, e3, e3_loc, s4, l, el) ->
       let _ = vis#vEnterScope () in
       let fc1' =
         match fc1 with
@@ -392,7 +403,7 @@ and childrenStatement vis s =
       let s4' = vs l s4 in
       let _ = vis#vExitScope () in
       if fc1' != fc1 || e2' != e2 || e3' != e3 || s4' != s4
-      then FOR (fc1', e2', e3', s4', l, el) else s
+      then FOR (fc1', fc_loc, e2', e2_loc, e3', e3_loc, s4', l, el) else s
   | BREAK _ | CONTINUE _ | GOTO _ -> s
   | RETURN (e, l, el) ->
       let e' = ve e in

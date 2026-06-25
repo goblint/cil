@@ -583,9 +583,9 @@ and checkExp (isconst: bool) (e: exp) : typ =
       | AddrOfLabel (gref) -> begin
           (* Find a label *)
           let lab =
-            match List.filter (function Label _ -> true | _ -> false)
+            match List.find_opt (function Label _ -> true | _ -> false)
                   !gref.labels with
-              Label (lab, _, _) :: _ -> lab
+              Some (Label (lab, _, _)) -> lab
             | _ ->
                 ignore (warn "Address of label to block without a label");
                 "<missing label>"
@@ -748,9 +748,9 @@ and checkStmt (s: stmt) =
           currentLoc := l;
           (* Find a label *)
           let lab =
-            match List.filter (function Label _ -> true | _ -> false)
-                  !gref.labels with (* TODO: List.find_opt? *)
-              Label (lab, _, _) :: _ -> lab
+            match List.find_opt (function Label _ -> true | _ -> false)
+                  !gref.labels with
+              Some (Label (lab, _, _)) -> lab
             | _ ->
                 ignore (warn "Goto to block without a label");
                 "<missing label>"
@@ -814,9 +814,9 @@ and checkStmt (s: stmt) =
         List.iter (fun gref ->
             (* Find a label *)
             let lab =
-              match List.filter (function Label _ -> true | _ -> false)
-                    !gref.labels with (* TODO: List.find_opt? *)
-                Label (lab, _, _) :: _ -> lab
+              match List.find_opt (function Label _ -> true | _ -> false)
+                  !gref.labels with
+                Some (Label (lab, _, _)) -> lab
               | _ ->
                   ignore (warn "Assembly goto to block without a label");
                   "<missing label>"

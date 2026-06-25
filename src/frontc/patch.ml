@@ -558,12 +558,18 @@ begin
     )
 end
 
-and unifyField (pat : field_group) (tgt : field_group) : binding list =
+and unifyField (pat : struct_decl) (tgt : struct_decl) : binding list =
 begin
-  match pat,tgt with (spec1, list1), (spec2, list2) -> (
+  match pat, tgt with
+  | FIELD_GROUP (spec1, list1), FIELD_GROUP (spec2, list2) ->
     (unifySpecifiers spec1 spec2) @
     (unifyList list1 list2 unifyNameExprOpt)
-  )
+  | FIELD_STATIC_ASSERT (exp1, str1, l1), FIELD_STATIC_ASSERT (exp2, str2, l2) ->
+    (unifyExpr exp1 exp2) @
+    (unifyStringOpt str1 str2)
+  | _, _ ->
+    if verbose then (trace "patchDebug" (dprintf "mismatching struct_decl-s\n"));
+      raise NoMatch
 end
 
 and unifyNameExprOpt (pat : name * expression option)
@@ -698,6 +704,15 @@ begin
       (trace "patchDebug" (dprintf "mismatching names: %s and %s\n" pat tgt));
     raise NoMatch
   )
+end
+
+and unifyStringOpt (pat : string option)
+                   (tgt : string option) : binding list =
+begin
+  match pat,tgt with
+  | None, None -> []
+  | Some str1, Some str2 -> unifyString str1 str2
+  | _,_ -> raise NoMatch
 end
 
 and unifyExpr (pat : expression) (tgt : expression) : binding list =
