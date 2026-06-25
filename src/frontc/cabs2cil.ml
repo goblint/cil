@@ -7091,10 +7091,7 @@ and doStatement (s : A.statement) : chunk =
 	      (tmpls, outs', ins', clobs, gotos')
 	in
         !stmts @@
-        { stmts = [mkStmt (Asm(attr', tmpls', outs', ins', clobs', gotos', loc'))];
-          postins = [];
-          cases = [];
-        }
+        s2c (mkStmt (Asm(attr', tmpls', outs', ins', clobs', gotos', loc')))
 
   with e when continueOnError -> begin
     (ignore (E.log "Error in doStatement (%s)\n" (Printexc.to_string e)));

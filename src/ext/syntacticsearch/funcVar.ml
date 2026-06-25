@@ -194,14 +194,8 @@ let rec search_stmt_list_for_var list name varid includeCallTmp =
       | Block block ->
           search_stmt_list_for_var block.bstmts name varid includeCallTmp
       | Asm(_, _, outs, ins, _, gotos, loc) ->
-        List.flatten (
-          List.concat([
-            (List.map (fun asmout -> match asmout with
-              (_, _, lval) -> search_expression (Lval lval) name loc varid includeCallTmp) outs);
-            (List.map (fun asmin -> match asmin with
-              (_, _, exp) -> search_expression exp name loc varid includeCallTmp) ins)
-          ])
-        )
+          List.concat_map (fun (_, _, lval) -> search_expression (Lval lval) name loc varid includeCallTmp) outs
+          @ List.concat_map (fun (_, _, exp) -> search_expression exp name loc varid includeCallTmp) ins
       | _ -> [] )
       @ search_stmt_list_for_var xs name varid includeCallTmp
   | [] -> []

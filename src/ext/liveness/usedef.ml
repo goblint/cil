@@ -241,11 +241,11 @@ let rec computeDeepUseDefStmtKind ?(acc_used=VS.empty)
       List.iter (fun i -> ignore (visitCilInstr useDefVisitor i)) il;
       !varUsed, !varDefs
   | Block b -> handle_block b
-  | Asm (a, b, c, d, e, f, g) -> 
+  | Asm _ -> 
       computeUseDefStmtKind 
         ~acc_used:!varUsed
         ~acc_defs:!varDefs
-        (Asm (a, b, c, d, e, f, g))
+        sk
 
 let computeUseLocalTypes ?(acc_used=VS.empty)
                          (fd : fundec)
