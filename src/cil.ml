@@ -3971,9 +3971,6 @@ class defaultCilPrinterClass : cilPrinter = object (self)
     end
     | Block b -> align ++ self#pBlock () b
     | Asm(attrs, tmpls, outs, ins, clobs, gotos, l) ->
-        let hasGotoAttr = List.length (List.filter (fun attr -> match attr with
-          Attr("goto", _) -> true
-          | _ -> false) attrs) > 0 in
         self#pLineDirective l
           ++ text ("__asm__ ")
           ++ self#pAttrs () attrs
@@ -3983,7 +3980,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                       (fun x -> text ("\"" ^ escape_string x ^ "\""))
                       () tmpls)
                 ++
-                (if outs = [] && ins = [] && clobs = [] && not hasGotoAttr then
+                (if outs = [] && ins = [] && clobs = [] && gotos = [] then
                   chr ':'
               else
                 (text ": "
@@ -3997,7 +3994,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                               ++ self#pLval () lv
                               ++ text ")") () outs)))
               ++
-                (if ins = [] && clobs = [] && not hasGotoAttr then
+                (if ins = [] && clobs = [] && gotos = [] then
                   nil
                 else
                   (text ": "
@@ -4011,7 +4008,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                                 ++ self#pExp () e
                                 ++ text ")") () ins)))
                 ++
-                (if clobs = [] && not hasGotoAttr then nil
+                (if clobs = [] && gotos = [] then nil
                 else
                   (text ": "
                       ++ (docList ~sep:(chr ',' ++ break)
@@ -4019,24 +4016,23 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                             ()
                             clobs))
                 ++
-                (if not hasGotoAttr then nil
+                (if gotos = [] then nil
                 else
                   (text ": "
                       ++ (docList ~sep:(chr ',' ++ break)
-                            (fun c -> text c)
-                            ()
-                            (List.map (fun stmt -> 
+                            (fun stmt -> 
+                              (* Grab one of the labels *)
                               let rec pickLabel = function
                                   [] -> None
                                 | Label (l, _, _) :: _ -> Some l
                                 | _ :: rest -> pickLabel rest
                               in
                               match pickLabel !stmt.labels with
-                                Some lbl -> lbl
+                                Some lbl -> text lbl
                               | None ->
                                   ignore (error "Cannot find label for target of goto");
-                                  "__invalid_label;"
-                              ) gotos)))))
+                                  text "__invalid_label;"
+                              ) () gotos))))
                 ++ unalign)
           ++ text (")" ^ printInstrTerminator)
 
