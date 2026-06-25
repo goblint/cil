@@ -749,7 +749,7 @@ and checkStmt (s: stmt) =
           (* Find a label *)
           let lab =
             match List.filter (function Label _ -> true | _ -> false)
-                  !gref.labels with
+                  !gref.labels with (* TODO: List.find_opt? *)
               Label (lab, _, _) :: _ -> lab
             | _ ->
                 ignore (warn "Goto to block without a label");
@@ -811,19 +811,19 @@ and checkStmt (s: stmt) =
             cases;
       | Asm (_, _, _, _, _, gotos, l) ->
         currentLoc := l;
-        (* Find a label *)
         List.iter (fun gref ->
-          let lab =
-            match List.filter (function Label _ -> true | _ -> false)
-                  !gref.labels with
-              Label (lab, _, _) :: _ -> lab
-            | _ ->
-                ignore (warn "Assembly goto to block without a label");
-                "<missing label>"
-          in
-          (* Remember it as a target *)
-          gotoTargets := (lab, !gref) :: !gotoTargets
-        ) gotos
+            (* Find a label *)
+            let lab =
+              match List.filter (function Label _ -> true | _ -> false)
+                    !gref.labels with (* TODO: List.find_opt? *)
+                Label (lab, _, _) :: _ -> lab
+              | _ ->
+                  ignore (warn "Assembly goto to block without a label");
+                  "<missing label>"
+            in
+            (* Remember it as a target *)
+            gotoTargets := (lab, !gref) :: !gotoTargets
+          ) gotos
       | Instr il -> List.iter checkInstr il)
     () (* argument of withContext *)
 

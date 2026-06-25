@@ -823,27 +823,27 @@ and stmtkind =
   | Block of block                      (** Just a block of statements. Use it
                                             as a way to keep some attributes
                                             local *)
-  | Asm        of attributes * (* Really only const and volatile can appear
-                here *)
-              string list *         (* templates (CR-separated) *)
-              (string option * string * lval) list *
-                        (* outputs must be lvals with
-                            optional names and constraints.
-                            I would like these
-                            to be actually variables, but I
-                            run into some trouble with ASMs
-                            in the Linux sources  *)
-              (string option * string * exp) list *
-                      (* inputs with optional names and constraints *)
-              string list *         (* register clobbers *)
-              stmt ref list *         (* goto labels *)
-              location
-              (** An inline assembly instruction. The arguments are (1) a list of
-              attributes (only const and volatile can appear here and only for
-              GCC), (2) templates (CR-separated), (3) a list of
-              outputs, each of which is an lvalue with a constraint, (4) a list
-              of input expressions along with constraints, (5) clobbered
-              registers, and (5) location information *)
+  | Asm        of attributes * (* Really only const, volatile and goto can appear
+                                 here *)
+                  string list *         (* templates (CR-separated) *)
+                  (string option * string * lval) list *
+                                          (* outputs must be lvals with
+                                             optional names and constraints.
+                                             I would like these
+                                             to be actually variables, but I
+                                             run into some trouble with ASMs
+                                             in the Linux sources  *)
+                  (string option * string * exp) list *
+                                        (* inputs with optional names and constraints *)
+                  string list *         (* register clobbers *)
+                  stmt ref list *       (* gotos *)
+                  location
+        (** An inline assembly instruction. The arguments are (1) a list of
+            attributes (only const and volatile can appear here and only for
+            GCC), (2) templates (CR-separated), (3) a list of
+            outputs, each of which is an lvalue with a constraint, (4) a list
+            of input expressions along with constraints, (5) clobbered
+            registers, (6) gotos and (7) location information *)
 
 (** Instructions. They may cause effects directly but may not have control
     flow.*)
@@ -5456,14 +5456,14 @@ and childrenStmt (toPrepend: instr list ref) : cilVisitor -> stmt -> stmt =
         let b' = fBlock b in
         if b' != b then Block b' else s.skind
     | Asm(sl,isvol,outs,ins,clobs,gotos,l) ->
-      let outs' = mapNoCopy (fun ((id,s,lv) as pair) ->
-                              let lv' = visitCilLval vis lv in
-                              if lv' != lv then (id,s,lv') else pair) outs in
-      let ins'  = mapNoCopy (fun ((id,s,e) as pair) ->
-                              let e' = fExp e in
-                              if e' != e then (id,s,e') else pair) ins in
-      if outs' != outs || ins' != ins then
-        Asm(sl,isvol,outs',ins',clobs,gotos,l) else s.skind
+        let outs' = mapNoCopy (fun ((id,s,lv) as pair) ->
+                                let lv' = visitCilLval vis lv in
+                                if lv' != lv then (id,s,lv') else pair) outs in
+        let ins'  = mapNoCopy (fun ((id,s,e) as pair) ->
+                                let e' = fExp e in
+                                if e' != e then (id,s,e') else pair) ins in
+        if outs' != outs || ins' != ins then
+          Asm(sl,isvol,outs',ins',clobs,gotos,l) else s.skind
   in
   if skind' != s.skind then s.skind <- skind';
   (* Visit the labels *)
@@ -6493,7 +6493,7 @@ class copyFunctionVisitor (newname: string) = object (self)
     s.sid <- !sid; incr sid;
     let s' = {s with sid = s.sid} in
     H.add stmtmap s.sid s'; (* Remember where we copied this *)
-    (* if we have a Goto or a Switch remember them to fixup at end *)
+    (* if we have a Goto, a Switch or an Asm, then remember them to fixup at end *)
     (match s'.skind with
       (Goto _ | Switch _ | Asm _) -> patches := s' :: !patches
     | _ -> ());
