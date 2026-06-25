@@ -289,7 +289,7 @@ let getDefRhs didstmh stmdat defId =
 	   IH.add rhsHtbl defId None;
 	   None))
       with Invalid_argument _ -> None end
-	| Asm _ -> None
+	(* | Asm _ -> None *)
   | _ -> E.s (E.error "getDefRhs: defining statement not an instruction list %d" defId)
 	(*None*)
 
