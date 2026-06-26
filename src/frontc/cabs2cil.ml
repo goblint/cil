@@ -882,7 +882,7 @@ module BlockChunk =
             | Block b ->
               doBlock ~first b;
               s.skind
-            | Asm (a, b, c, d, e, f, loc) -> Asm (a, b, c, d, e, f, doLoc loc)
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock ~first b =
           doStmts ~first b.bstmts
         and doStmts ~first = function
@@ -921,7 +921,7 @@ module BlockChunk =
             | Block b ->
               doBlock b;
               s.skind
-            | Asm(attrs, templates, outs, ins, clobbers, gotos, loc) -> Asm(attrs, templates, outs, ins, clobbers, gotos, doLoc loc)
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock b =
           doStmts b.bstmts
         and doStmts = function
@@ -964,7 +964,7 @@ module BlockChunk =
             | Block b ->
               doBlock b;
               s.skind
-            | Asm (a, b, c, d, e, f, loc) -> Asm (a, b, c, d, e, f, doLoc loc)
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock b =
           doStmts b.bstmts
         and doStmts = function
@@ -7125,7 +7125,7 @@ and doStatement (s : A.statement) : chunk =
 	      (tmpls, outs', ins', clobs, gotos')
 	in
         !stmts @@
-        s2c (mkStmt (Asm(attr', tmpls', outs', ins', clobs', gotos', loc')))
+        s2c (mkStmt (Asm {attr = attr'; template = tmpls'; outputs = outs'; inputs = ins'; clobbers = clobs'; gotos = gotos'; loc = loc'}))
 
   with e when continueOnError -> begin
     (ignore (E.log "Error in doStatement (%s)\n" (Printexc.to_string e)));

@@ -643,7 +643,7 @@ class markUsedLabels (labelMap: (string, unit) H.t) = object
         H.replace labelMap ln ();
         DoChildren
 
-    | Asm(_, _, _, _, _, gotos, _) ->
+    | Asm {gotos; _} ->
         List.iter (fun dest ->
             let (ln, _, _), _ = labelsToKeep !dest.labels in
             if ln = "" then

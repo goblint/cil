@@ -225,7 +225,7 @@ and cfgStmt (s: stmt) (next:stmt option) (break:stmt option) (cont:stmt option)
       cfgBlock blk (Some s) next (Some s) nodeList rlabels
       (* Since all loops have terminating condition true, we don't put
          any direct successor to stmt following the loop *)
-  |  Asm(_, _, _, _, _, gotos, _) ->
+  |  Asm {gotos; _} ->
       List.iter (fun g -> addSucc !g) gotos;
       addOptionSucc next
 

@@ -809,7 +809,7 @@ and checkStmt (s: stmt) =
               in
               findCase !statements)
             cases;
-      | Asm (_, _, _, _, _, gotos, l) ->
+      | Asm {gotos; loc = l; _} ->
         currentLoc := l;
         List.iter (fun gref ->
             (* Find a label *)

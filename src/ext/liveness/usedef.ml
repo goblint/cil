@@ -194,7 +194,7 @@ let computeUseDefStmtKind ?(acc_used=VS.empty)
     | Instr il ->
         List.iter (fun i -> ignore (visitCilInstr useDefVisitor i)) il
     | Block _ -> ()
-    | Asm(_,_,slvl,_,_,_,_) -> List.iter (fun (_,s,lv) ->
+    | Asm {outputs = slvl; _} -> List.iter (fun (_,s,lv) ->
       match lv with (Var v, off) ->
         if s.[0] = '+' then
           varUsed := VS.add v !varUsed;

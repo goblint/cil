@@ -823,21 +823,15 @@ and stmtkind =
   | Block of block                      (** Just a block of statements. Use it
                                             as a way to keep some attributes
                                             local *)
-  | Asm        of attributes * (* Really only const, volatile and goto can appear
-                                 here *)
-                  string list *         (* templates (CR-separated) *)
-                  (string option * string * lval) list *
-                                          (* outputs must be lvals with
-                                             optional names and constraints.
-                                             I would like these
-                                             to be actually variables, but I
-                                             run into some trouble with ASMs
-                                             in the Linux sources  *)
-                  (string option * string * exp) list *
-                                        (* inputs with optional names and constraints *)
-                  string list *         (* register clobbers *)
-                  stmt ref list *       (* gotos *)
-                  location
+  | Asm of {
+      attr: attributes; (** Really only [const], [volatile] and [goto] can appear here *)
+      template: string list; (** templates (CR-separated) *)
+      outputs: (string option * string * lval) list; (** outputs must be lvals with optional names and constraints. *) (* TODO: I would like these to be actually variables, but I run into some trouble with ASMs in the Linux sources  *)
+      inputs: (string option * string * exp) list; (** inputs with optional names and constraints *)
+      clobbers: string list; (** register clobbers *)
+      gotos: stmt ref list; (** gotos *)
+      loc: location
+    }
         (** An inline assembly instruction. The arguments are (1) a list of
             attributes (only const and volatile can appear here and only for
             GCC), (2) templates (CR-separated), (3) a list of
@@ -1166,7 +1160,7 @@ let rec get_stmtLoc (statement : stmtkind) =
     | Loop (_, loc, _, _, _) -> loc
     | Block b -> if b.bstmts == [] then lu
                  else get_stmtLoc ((List.hd b.bstmts).skind)
-    | Asm(_, _, _, _, _, _, loc) -> loc
+    | Asm {loc; _} -> loc
 
 
 (* The next variable identifier to use. Counts up *)
@@ -1365,7 +1359,7 @@ let mkBlock (slst: stmt list) : block =
 let mkEmptyStmt () = mkStmt (Instr [])
 let mkStmtOneInstr (i: instr) = mkStmt (Instr [i])
 
-let dummyStmt =  mkStmt (Asm([], ["dummy statement!!"], [], [], [], [], lu))
+let dummyStmt =  mkStmt (Asm {attr = []; template = ["dummy statement!!"]; outputs = []; inputs = []; clobbers = []; gotos = []; loc = lu})
 
 let compactStmts (b: stmt list) : stmt list =
       (* Try to compress statements. Scan the list of statements and remember
@@ -3974,7 +3968,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                   ++ self#pBlock () b)
     end
     | Block b -> align ++ self#pBlock () b
-    | Asm(attrs, tmpls, outs, ins, clobs, gotos, l) ->
+    | Asm {attr = attrs; template = tmpls; outputs = outs; inputs = ins; clobbers = clobs; gotos; loc = l} ->
         self#pLineDirective l
           ++ text ("__asm__ ")
           ++ self#pAttrs () attrs
@@ -5455,7 +5449,7 @@ and childrenStmt (toPrepend: instr list ref) : cilVisitor -> stmt -> stmt =
     | Block b ->
         let b' = fBlock b in
         if b' != b then Block b' else s.skind
-    | Asm(sl,isvol,outs,ins,clobs,gotos,l) ->
+    | Asm {attr = sl; template = isvol; outputs = outs; inputs = ins; clobbers = clobs; gotos; loc = l} ->
         let outs' = mapNoCopy (fun ((id,s,lv) as pair) ->
                                 let lv' = visitCilLval vis lv in
                                 if lv' != lv then (id,s,lv') else pair) outs in
@@ -5463,7 +5457,7 @@ and childrenStmt (toPrepend: instr list ref) : cilVisitor -> stmt -> stmt =
                                 let e' = fExp e in
                                 if e' != e then (id,s,e') else pair) ins in
         if outs' != outs || ins' != ins then
-          Asm(sl,isvol,outs',ins',clobs,gotos,l) else s.skind
+          Asm {attr = sl; template = isvol; outputs = outs'; inputs = ins'; clobbers = clobs; gotos; loc = l} else s.skind
   in
   if skind' != s.skind then s.skind <- skind';
   (* Visit the labels *)
@@ -6077,7 +6071,7 @@ let dExp: doc -> exp =
   fun d -> Const(CStr(sprint ~width:!lineLength d, No_encoding))
 
 let dStmt: doc -> location -> stmt =
-  fun d l -> mkStmt (Asm([], [sprint ~width:!lineLength d], [], [], [], [], l))
+  fun d l -> mkStmt (Asm {attr = []; template = [sprint ~width:!lineLength d]; outputs = []; inputs = []; clobbers = []; gotos = []; loc = l})
 
 let dGlobal: doc -> location -> global =
   fun d l -> GAsm(sprint ~width:!lineLength d, l)
@@ -6450,10 +6444,10 @@ class copyFunctionVisitor (newname: string) = object (self)
         | Switch (e, body, cases, l, el) ->
             s.skind <- Switch (e, body,
                                Util.list_map (fun cs -> findStmt cs.sid) cases, l, el)
-        | Asm(attr, template, outs, ins, clobbers, gotos, loc) ->
+        | Asm a ->
             (* Make a copy of the reference *)
-            let gotos' = List.map (fun sr -> ref (findStmt !sr.sid)) gotos in
-            s.skind <- Asm(attr, template, outs, ins, clobbers, gotos', loc)
+            let gotos' = List.map (fun sr -> ref (findStmt !sr.sid)) a.gotos in
+            s.skind <- Asm {a with gotos = gotos'}
         | _ -> assert false
       in
       List.iter patchstmt !patches;
@@ -6566,7 +6560,7 @@ and succpred_stmt s fallthrough rlabels =
   | Return _ -> ()
   | Goto(dest,l) -> link s !dest
   | ComputedGoto(e,l) ->  List.iter (link s) rlabels
-  | Asm(_, _, _, _, _, gotos, _) ->
+  | Asm {gotos; _} ->
     List.iter (fun l -> link s !l) gotos;
     trylink s fallthrough
   | Break _

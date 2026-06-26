@@ -1014,7 +1014,7 @@ class unusedRemoverClass : cilVisitor = object(self)
 	let newil' = Util.list_map call_fixer newil in
 	stm.skind <- Instr(newil');
 	SkipChildren
-    | Asm(_,_,slvlst,_,_,_,_) -> begin
+    | Asm {outputs = slvlst; _} -> begin
       (* make sure the outputs are in the locals list *)
       List.iter (fun (_,s,lv) ->
         match lv with (Var vi,_) ->

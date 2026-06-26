@@ -1021,21 +1021,15 @@ and stmtkind =
     (** Just a block of statements. Use it as a way to keep some block
        attributes local *)
 
-  | Asm        of attributes * (* Really only const, volatile and goto can appear
-                                 here *)
-                  string list *         (* templates (CR-separated) *)
-                  (string option * string * lval) list *
-                                          (* outputs must be lvals with
-                                             optional names and constraints.
-                                             I would like these
-                                             to be actually variables, but I
-                                             run into some trouble with ASMs
-                                             in the Linux sources  *)
-                  (string option * string * exp) list *
-                                        (* inputs with optional names and constraints *)
-                  string list *         (* register clobbers *)
-                  stmt ref list *       (* gotos *)
-                  location
+  | Asm of {
+      attr: attributes; (** Really only [const], [volatile] and [goto] can appear here *)
+      template: string list; (** templates (CR-separated) *)
+      outputs: (string option * string * lval) list; (** outputs must be lvals with optional names and constraints. *) (* TODO: I would like these to be actually variables, but I run into some trouble with ASMs in the Linux sources  *)
+      inputs: (string option * string * exp) list; (** inputs with optional names and constraints *)
+      clobbers: string list; (** register clobbers *)
+      gotos: stmt ref list; (** gotos *)
+      loc: location
+    }
     (** There are for storing inline assembly. They follow the GCC
         specification:
 {v

@@ -80,7 +80,7 @@ class usedDefsCollectorClass = object(self)
     ignore(super#vstmt s);
     match s.skind with
     | Instr _ -> DoChildren
-    | Asm(_,_,slvl,_,_,_,_) -> begin match self#get_cur_iosh() with
+    | Asm {outputs = slvl; _} -> begin match self#get_cur_iosh() with
       | Some iosh -> List.iter (fun (_,s,lv) ->
         match lv with (Var v, off) ->
           if s.[0] = '+' then
