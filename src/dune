@@ -63,10 +63,23 @@
  (action (with-stdout-to %{target} (run ./modelConfigure.exe --real-gcc %{read-lines:../bin/real-gcc} -m 64))))
 
 (rule
+ (enabled_if (<> %{os_type} Win32))
  (deps machdep32 machdep64)
  (target machdep.ml)
  (action (run %{bin:cppo} -V OCAML:%{ocaml_version}
               %{dep:machdep.cppo.ml} -x machdep:./%{dep:machdep-ml.exe}
+              -o %{target})))
+
+; cppo runs the -x command through cmd.exe on Windows, which does not
+; understand the "./" prefix that %{dep:...} produces — spell it ".\"
+; instead (a bare name would break when cmd's current-directory lookup
+; is disabled via NoDefaultCurrentDirectoryInExePath).
+(rule
+ (enabled_if (= %{os_type} Win32))
+ (deps machdep32 machdep64 machdep-ml.exe)
+ (target machdep.ml)
+ (action (run %{bin:cppo} -V OCAML:%{ocaml_version}
+              %{dep:machdep.cppo.ml} -x "machdep:.\\machdep-ml.exe"
               -o %{target})))
 
 (ocamllex formatlex)
