@@ -4029,7 +4029,7 @@ class defaultCilPrinterClass : cilPrinter = object (self)
                                 Some lbl -> text lbl
                               | None ->
                                   ignore (error "Cannot find label for target of goto");
-                                  text "__invalid_label;"
+                                  text "__invalid_label"
                               ) () gotos))))
                 ++ unalign)
           ++ text (")" ^ printInstrTerminator)
