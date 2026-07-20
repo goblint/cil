@@ -1023,12 +1023,13 @@ and stmtkind =
 
 (** {b Instructions}.
  An instruction {!instr} is a statement that has no local
-(intraprocedural) control flow. It can be either an assignment,
+(intraprocedural) control flow. It can be either pure evaluation, an assignment,
 function call, or an inline assembly instruction. *)
 
 (** Instructions. *)
 and instr =
-  Set        of lval * exp * location * location
+  | Pure of exp * location (** Side-effect-less expression evaluation. *)
+  | Set        of lval * exp * location * location
    (** An assignment. The type of the expression is guaranteed to be the same
       with that of the lvalue.
       Second location is just for expression when inside condition. *)

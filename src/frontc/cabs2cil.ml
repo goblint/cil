@@ -842,6 +842,7 @@ module BlockChunk =
         {l with synthetic = true}
 
       let doInstr: instr -> instr = function
+        | Pure (e, loc) -> Pure (e, doLoc loc)
         | Set (l, e, loc, eloc) -> Set (l, e, doLoc loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, doLoc loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, doLoc loc, doLoc eloc)
@@ -936,6 +937,7 @@ module BlockChunk =
           c
 
       let eDoInstr: instr -> instr = function
+        | Pure (e, loc) -> Pure (e, doLoc loc)
         | Set (l, e, loc, eloc) -> Set (l, e, loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, loc, doLoc eloc)
@@ -6503,7 +6505,8 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
                unnecessary warning than to break CIL's invariant that
                return statements are inserted properly.  *)
             let instrFallsThrough (i : instr) = match i with
-              Set _ -> true
+            | Pure _
+            | Set _ -> true
             | Call (None, Lval (Var e, NoOffset), _, _, _) ->
                 (* See if this is exit, or if it has the noreturn attribute *)
                 if e.vname = "exit" then false
