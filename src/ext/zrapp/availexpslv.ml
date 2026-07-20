@@ -308,6 +308,16 @@ let lvh_handle_inst i lvh =
   | VarDecl _ ->   raise (Unimplemented "VarDecl") (* VarDecl instruction is not supported for availexpslv, to make availexpslv work for programs without VLA *)
                                                    (* make sure to set alwaysGenerateVarDecl in cabs2cil.ml to false. To support VLA, implement this.  *)
 
+let lvh_handle_stmt s lvh =
+  match s.skind with
+  | Asm _ ->
+    let _, d = UD.computeUseDefStmtKind s.skind in
+    UD.VS.iter (fun vi ->
+        lvh_kill_vi lvh vi
+      ) d;
+    DF.SUse lvh
+  | _ -> DF.SDefault
+
 module AvailableExps =
   struct
 
@@ -334,7 +344,7 @@ module AvailableExps =
       let action = lvh_handle_inst i in
       DF.Post(action)
 
-    let doStmt stm astate = DF.SDefault
+    let doStmt stm astate = lvh_handle_stmt stm astate
 
     let doGuard c astate = DF.GDefault
 
