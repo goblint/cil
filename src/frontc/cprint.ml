@@ -742,9 +742,10 @@ and print_statement stat =
                 if clobs <> [] || labels <> [] then begin
                   print ":"; space ();
                   print_commas false print_string clobs;
-                  if labels <> [] then 
+                  if labels <> [] then begin
                     print ":"; space ();
                     print_commas false print labels
+                  end
                 end;
               end;
         end;
