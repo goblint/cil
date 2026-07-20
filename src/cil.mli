@@ -1022,7 +1022,7 @@ and stmtkind =
        attributes local *)
 
   | Asm of {
-      attr: attributes; (** Really only [const], [volatile] and [goto] can appear here *)
+      attr: attributes; (** Really only [const], [volatile], [inline] and [goto] can appear here *)
       template: string list; (** templates (CR-separated) *)
       outputs: (string option * string * lval) list; (** outputs must be lvals with optional names and constraints. *) (* TODO: I would like these to be actually variables, but I run into some trouble with ASMs in the Linux sources  *)
       inputs: (string option * string * exp) list; (** inputs with optional names and constraints *)
