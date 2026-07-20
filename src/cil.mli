@@ -1082,7 +1082,7 @@ an example (from gcc manual):
 (** {b Instructions}.
  An instruction {!instr} is a statement that has no local
 (intraprocedural) control flow. It can be either an assignment,
-function call, or an inline assembly instruction. *)
+function call, or a variable declaration. *)
 
 (** Instructions. *)
 and instr =
