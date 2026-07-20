@@ -3486,9 +3486,9 @@ and isIntegerConstant (aexp) : int option =
 
      (* Process an expression and in the process do some type checking,
         extract the effects as separate statements  *)
-and doExp: type a. bool -> expression -> a expAction -> chunk * exp * typ = fun (type a) (asconst: bool)   (* This expression is used as a constant *)
+and doExp: type a. bool -> expression -> a expAction -> a = fun (type a) (asconst: bool)   (* This expression is used as a constant *)
           (e: A.expression)
-          (what: a expAction) : (chunk * exp * typ) ->
+          (what: a expAction) : a ->
   (* A subexpression of array type is automatically turned into StartOf(e).
      Similarly an expression of function type is turned into AddrOf. So
      essentially doExp should never return things of type TFun or TArray *)
@@ -3508,10 +3508,10 @@ and doExp: type a. bool -> expression -> a expAction -> chunk * exp * typ = fun 
 chunk ->
 exp ->
 typ ->
-chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
-                (se: chunk) (e: exp) (t: typ) : (chunk * exp * typ) -> (* TODO: why need parens around return type here? *)
+b = fun (type b) ~(newWhat:b expAction)
+                (se: chunk) (e: exp) (t: typ) : b -> (* TODO: why need parens around return type here? *)
     match newWhat with
-      ADrop
+    | ADrop -> (SynthetizeLoc.doChunkTail se, e, t)
     | AType -> (SynthetizeLoc.doChunkTail se, e, t)
     | AExpLeaveArrayFun ->
         (SynthetizeLoc.doChunkTail se, e, t) (* It is important that we do not do "processArrayFun" in
@@ -4455,7 +4455,7 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
           (* Replace call to builtin nan with computation yielding NaN *)
           let onef = Const(CReal(0.0,FDouble,None)) in
           let zerodivzero = mkCast ~kind:Internal ~e:(BinOp(Div,onef,onef,doubleType)) ~newt:resType in
-          (empty,zerodivzero,resType)
+          finishExp empty zerodivzero resType (* TODO: is finishExp right? *)
         else (
         (* If the "--forceRLArgEval" flag was used, make sure
           we evaluate args right-to-left.
@@ -4848,10 +4848,10 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
     | A.COMMA el ->
         if asconst then
           ignore (warn "COMMA in constant");
-        let rec loop sofar = function
+        let rec loop sofar: expression list -> a = function
             [e] ->
-              let (se, e', t') = doExp false e what in (* Pass on the action *)
-              (sofar @@ se, e', t')
+              let (se, e', t') = doExp false e AExpLeaveArrayFun in (* Pass on the action *)
+              finishExp (sofar @@ se) e' t'
 (*
               finishExp (sofar @@ se) e' t' (* does not hurt to do it twice.
                                                GN: it seems it does *)
@@ -5028,8 +5028,8 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
           | _ ->
               try findLastComputation (List.rev b.A.bstmts), false
               with Not_found ->
-                E.s (error "Cannot find COMPUTATION in GNU.body")
-                  (*                A.NOP cabslu, true *)
+                (* E.s (error "Cannot find COMPUTATION in GNU.body 1") *)
+                                 A.NOP cabslu, true
         in
         (* Prepare some data to be filled by doExp *)
         let data : (exp * typ) option ref = ref None in
@@ -5040,7 +5040,7 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
         gnu_body_result := old_gnu;
         match !data with
           None when isvoidbody -> finishExp se zero voidType
-        | None -> E.s (bug "Cannot find COMPUTATION in GNU.body")
+        | None -> E.s (bug "Cannot find COMPUTATION in GNU.body 2")
         | Some (e, t) -> finishExp se e t
     end
 
@@ -5085,10 +5085,10 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
         (* TODO: error when multiple compatible associations or defaults even when unused? *)
 
         begin match al_compatible with
-          | [(_, ae)] -> doExp false ae (AExp None)
+          | [(_, ae)] -> doExp false ae what
           | [] ->
             begin match al_default with
-              | [(_, ae)] -> doExp false ae (AExp None)
+              | [(_, ae)] -> doExp false ae what
               | [] -> E.s (error "No compatible associations or default in generic")
               | _ -> E.s (error "Multiple defaults in generic")
             end
@@ -5098,8 +5098,8 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
   with e when continueOnError -> begin
     (*ignore (E.log "error in doExp (%s)" (Printexc.to_string e));*)
     E.hadErrors := true;
-    (i2c (dInstr (dprintf "booo_exp(%t)" d_thisloc) !currentLoc),
-     integer 0, intType)
+    finishExp (i2c (dInstr (dprintf "booo_exp(%t)" d_thisloc) !currentLoc))
+     (integer 0) intType
   end
 
 (* bop is always the arithmetic version. Change it to the appropriate pointer
