@@ -1326,12 +1326,12 @@ class registerLabelsVisitor = object
 end
 
 (**** EXP actions ***)
-type expAction =
-    ADrop                               (* Drop the result. Only the
+type 'a expAction =
+    ADrop: (chunk * exp * typ) expAction                              (* Drop the result. Only the
                                            side-effect is interesting *)
-  | AType                               (* Only the type of the result
+  | AType: (chunk * exp * typ) expAction                               (* Only the type of the result
                                            is interesting.  *)
-  | ASet of lval * typ                  (* Put the result in a given lval,
+  | ASet: lval * typ -> (chunk * exp * typ) expAction                  (* Put the result in a given lval,
                                            provided it matches the type. The
                                            type is the type of the lval.
                                            The location of lval is guaranteed
@@ -1339,7 +1339,7 @@ type expAction =
                                            e.g. p[p[0]] when p[0] is initially
                                            0, so the location won't change
                                            after assignment. *)
-  | AExp of typ option                  (* Return the exp as usual.
+  | AExp: typ option -> (chunk * exp * typ) expAction                  (* Return the exp as usual.
                                            Optionally we can specify an
                                            expected type. This is useful for
                                            constants. The expected type is
@@ -1348,7 +1348,7 @@ type expAction =
                                            expression has that type.You must
                                            use a doCast afterwards to make
                                            sure. *)
-  | AExpLeaveArrayFun                   (* Do it like an expression, but do
+  | AExpLeaveArrayFun: (chunk * exp * typ) expAction                   (* Do it like an expression, but do
                                            not convert arrays of functions
                                            into pointers *)
 
@@ -3485,9 +3485,9 @@ and isIntegerConstant (aexp) : int option =
 
      (* Process an expression and in the process do some type checking,
         extract the effects as separate statements  *)
-and doExp (asconst: bool)   (* This expression is used as a constant *)
+and doExp: type a. bool -> expression -> a expAction -> chunk * exp * typ = fun (type a) (asconst: bool)   (* This expression is used as a constant *)
           (e: A.expression)
-          (what: expAction) : (chunk * exp * typ) =
+          (what: a expAction) : (chunk * exp * typ) ->
   (* A subexpression of array type is automatically turned into StartOf(e).
      Similarly an expression of function type is turned into AddrOf. So
      essentially doExp should never return things of type TFun or TArray *)
@@ -3503,8 +3503,12 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | _ -> e, t
   in
   (* Before we return we call finishExp *)
-  let finishExp ?(newWhat=what)
-                (se: chunk) (e: exp) (t: typ) : chunk * exp * typ =
+  let finishExp': type b. newWhat:b expAction ->
+chunk ->
+exp ->
+typ ->
+chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
+                (se: chunk) (e: exp) (t: typ) : (chunk * exp * typ) -> (* TODO: why need parens around return type here? *)
     match newWhat with
       ADrop
     | AType -> (SynthetizeLoc.doChunkTail se, e, t)
@@ -3534,6 +3538,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
             (SynthetizeLoc.doChunkTail (se +++ (Set(lv, e'', !currentLoc, !currentExpLoc))), e'', t'')
     end
   in
+  let finishExp = finishExp' ~newWhat:what in
   let findField (n: string) (fidlist: fieldinfo list) : offset =
     (* Depth first search for the field. This appears to be what GCC does. *)
     let rec search = function
@@ -3559,10 +3564,13 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
   try
     match e with
     | A.PAREN e -> E.s (bug "stripParen")
-    | A.NOTHING when what = ADrop -> finishExp empty (integer 0) intType
-    | A.NOTHING ->
+    | A.NOTHING -> begin
+      match what with
+      | ADrop -> finishExp empty (integer 0) intType
+      | _ ->
         let res = Const(CStr ("exp_nothing", No_encoding)) in
         finishExp empty res (typeOf res)
+    end
 
     (* Do the potential lvalues first *)
     | A.VARIABLE n -> begin
@@ -3957,7 +3965,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           match what with
             AExp (Some _) -> AExp (Some typ)
           | AExp None -> what
-          | ADrop | AType | AExpLeaveArrayFun -> what
+          | ADrop -> what
+          | AType -> what
+          | AExpLeaveArrayFun -> what
           | ASet (lv, lvt) ->
               (* If the cast from typ to lvt would be dropped, then we
                  continue with a Set *)
@@ -4186,13 +4196,14 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
              in
              let tresult, opresult = doBinOp uop' e' t one intType in
              let se', result =
-               if what <> ADrop && what <> AType then
+               match what with
+               | ADrop | AType -> 
+                 se, e'
+               | _ ->
                  let descr = (dd_exp () e')
                              ++ (if uop = A.POSINCR then text "++" else text "--") in
                  let tmp = newTempVar descr true t in
                  se +++ (Set(var tmp, e', !currentLoc, !currentExpLoc)), Lval(var tmp)
-               else
-                 se, e'
              in
              finishExp
                (se' +++ (Set(lv, makeCastT ~kind:Implicit ~e:opresult ~oldt:tresult ~newt:(typeOfLval lv), (* C11 6.5.2.4.2 *)
@@ -4510,7 +4521,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         let pf: exp ref = ref f'' in (* function to call *)
         let pargs: exp list ref = ref args' in (* arguments *)
         let pis__builtin_va_arg: bool ref = ref false in
-        let pwhat: expAction ref = ref what in (* what to do with result *)
+        let pwhat: a expAction ref = ref what in (* what to do with result *)
 
         let pres: exp ref = ref zero in (* If we do not have a call, this is the result *)
         let prestype: typ ref = ref intType in
@@ -4613,12 +4624,12 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                   | [ marker ; SizeOf resTyp ] ->
                     begin
                       (* Make a variable of the desired type *)
-                      let destlv, destlvtyp =
+                      (* let destlv, destlvtyp =
                         match !pwhat with
                         | ASet (lv, lvt) -> lv, lvt
                         | _ -> var (newTempVar nil true resTyp), resTyp
                       in
-                      pwhat := (ASet (destlv, destlvtyp));
+                      pwhat := (ASet (destlv, destlvtyp)); *)
                       pis__builtin_va_arg := true;
                     end
                   | _ -> ignore (warn "Invalid call to %s" fv.vname);
@@ -4851,7 +4862,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         in
         loop empty el
 
-    | A.QUESTION (e1,e2,e3) when what = ADrop ->
+    | A.QUESTION (e1,e2,e3) -> begin
+      match what with
+      | ADrop ->
         if asconst then
           ignore (warn "QUESTION with ADrop in constant");
         let (se3,_,_) = doExp false e3 ADrop in
@@ -4861,8 +4874,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           | _ -> let (se2,_,_) = doExp false e2 ADrop in se2
         in
         finishExp (doCondition asconst e1 se2 se3) zero intType
-
-    | A.QUESTION (e1, e2, e3) -> begin (* what is not ADrop *)
+      | _ -> begin (* what is not ADrop *)
         (* Compile the conditional expression *)
         let ce1 = doCondExp asconst e1 in
         (* Now we must find the type of both branches, in order to compute
@@ -4908,9 +4920,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
               None -> (* has form "e1 ? : e3"  *)
                 let tmp = var (newTempVar nil true tresult) in
                 let (se1, e1', t1) = doExp asconst e1 (AExp None) in
-                let (se1, _, _) = finishExp ~newWhat:(ASet(tmp, tresult))
+                let (se1, _, _) = finishExp' ~newWhat:(ASet(tmp, tresult))
                                     se1 (snd (castTo ~kind:ConditionalConversion t1 tresult e1')) tresult in
-                let (se3, _, _) = finishExp ~newWhat:(ASet(tmp, tresult))
+                let (se3, _, _) = finishExp' ~newWhat:(ASet(tmp, tresult))
                                     se3 (snd (castTo ~kind:ConditionalConversion t3 tresult e3')) tresult in
                 (* TODO: technically, it might be more accurate to branch on the value of e1' before ConditionalConversion *)
                 finishExp (se1 @@ ifChunk (Lval(tmp)) !currentLoc !currentExpLoc
@@ -4926,12 +4938,13 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                       var tmp, tresult
                 in
                 (* Now add the stmts lv:=e2 and lv:=e3 to se2 and se3 *)
-                let (se2, _, _) = finishExp ~newWhat:(ASet(lv,lvt))
+                let (se2, _, _) = finishExp' ~newWhat:(ASet(lv,lvt))
                                     se2 (snd (castTo ~kind:ConditionalConversion t2 tresult e2')) tresult in
-                let (se3, _, _) = finishExp ~newWhat:(ASet(lv,lvt))
+                let (se3, _, _) = finishExp' ~newWhat:(ASet(lv,lvt))
                                     se3 (snd (castTo ~kind:ConditionalConversion t3 tresult e3')) tresult in
                 finishExp (doCondition asconst e1 se2 se3) (Lval(lv)) tresult
         end
+      end
 
 (*
         (* Do these only to collect the types  *)
