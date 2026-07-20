@@ -1352,6 +1352,7 @@ type 'a expAction =
                                            not convert arrays of functions
                                            into pointers *)
 
+type expAction' = ExpAction: 'a expAction -> expAction'
 
 (*** Result of compiling conditional expressions *)
 type condExpRes =
@@ -4521,7 +4522,7 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
         let pf: exp ref = ref f'' in (* function to call *)
         let pargs: exp list ref = ref args' in (* arguments *)
         let pis__builtin_va_arg: bool ref = ref false in
-        let pwhat: a expAction ref = ref what in (* what to do with result *)
+        let pwhat: expAction' ref = ref (ExpAction what) in (* what to do with result *)
 
         let pres: exp ref = ref zero in (* If we do not have a call, this is the result *)
         let prestype: typ ref = ref intType in
@@ -4624,12 +4625,12 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
                   | [ marker ; SizeOf resTyp ] ->
                     begin
                       (* Make a variable of the desired type *)
-                      (* let destlv, destlvtyp =
+                      let destlv, destlvtyp =
                         match !pwhat with
-                        | ASet (lv, lvt) -> lv, lvt
+                        | ExpAction (ASet (lv, lvt)) -> lv, lvt
                         | _ -> var (newTempVar nil true resTyp), resTyp
                       in
-                      pwhat := (ASet (destlv, destlvtyp)); *)
+                      pwhat := ExpAction (ASet (destlv, destlvtyp));
                       pis__builtin_va_arg := true;
                     end
                   | _ -> ignore (warn "Invalid call to %s" fv.vname);
@@ -4819,16 +4820,16 @@ chunk * exp * typ = fun (type b) ~(newWhat:b expAction)
             prestype := t
           in
           match !pwhat with
-          | ADrop -> addCall None zero intType
-          | AType -> prestype := !resType'
-          | ASet(lv, vtype) when !doCollapseCallCast || (Util.equals (typeSig vtype) (typeSig !resType')) ->
+          | ExpAction ADrop -> addCall None zero intType
+          | ExpAction AType -> prestype := !resType'
+          | ExpAction ASet(lv, vtype) when !doCollapseCallCast || (Util.equals (typeSig vtype) (typeSig !resType')) ->
               (* We can assign the result directly to lv *)
               addCall (Some lv) (Lval(lv)) vtype
           | _ -> begin
               let restype'' =
                 match !pwhat with
-                  AExp (Some t) when !doCollapseCallCast -> t
-                | ASet (_, t) when !pis__builtin_va_arg -> t
+                | ExpAction (AExp (Some t)) when !doCollapseCallCast -> t
+                | ExpAction (ASet (_, t)) when !pis__builtin_va_arg -> t
                 | _ -> !resType'
               in
               let descr = dprintf "%a(%a)" dd_exp !pf (docList ~sep:(text ", ") (dd_exp ())) !pargs in
