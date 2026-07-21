@@ -1327,7 +1327,7 @@ end
 
 (**** EXP actions ***)
 type 'a expAction =
-    ADrop: (chunk * exp * typ) expAction                              (* Drop the result. Only the
+    ADrop: chunk expAction                              (* Drop the result. Only the
                                            side-effect is interesting *)
   | AType: (chunk * exp * typ) expAction                               (* Only the type of the result
                                            is interesting.  *)
@@ -3511,7 +3511,7 @@ typ ->
 b = fun (type b) ~(newWhat:b expAction)
                 (se: chunk) (e: exp) (t: typ) : b -> (* TODO: why need parens around return type here? *)
     match newWhat with
-    | ADrop -> (SynthetizeLoc.doChunkTail se, e, t)
+    | ADrop -> SynthetizeLoc.doChunkTail se
     | AType -> (SynthetizeLoc.doChunkTail se, e, t)
     | AExpLeaveArrayFun ->
         (SynthetizeLoc.doChunkTail se, e, t) (* It is important that we do not do "processArrayFun" in
@@ -3966,7 +3966,7 @@ b = fun (type b) ~(newWhat:b expAction)
           match what with
             AExp (Some _) -> AExp (Some typ)
           | AExp None -> what
-          | ADrop -> what
+          | ADrop -> AExpLeaveArrayFun
           | AType -> what
           | AExpLeaveArrayFun -> what
           | ASet (lv, lvt) ->
@@ -4022,9 +4022,9 @@ b = fun (type b) ~(newWhat:b expAction)
           end
         in
         let (t'', e'') =
-          match typ with
-            TVoid _ when what' = ADrop -> (t', e') (* strange GNU thing *)
-          |  _ ->
+          match typ, what with
+            TVoid _, ADrop -> (t', e') (* strange GNU thing *)
+          |  _, _ ->
               (* Do this to check the cast, unless we are sure that we do not
                  need the check. *)
               let newtyp, newexp =
@@ -4857,7 +4857,7 @@ b = fun (type b) ~(newWhat:b expAction)
                                                GN: it seems it does *)
 *)
           | e :: rest ->
-              let (se, _, _) = doExp false e ADrop in
+              let se = doExp false e ADrop in
               loop (sofar @@ se) rest
           | [] -> E.s (error "empty COMMA expression")
         in
@@ -4868,11 +4868,11 @@ b = fun (type b) ~(newWhat:b expAction)
       | ADrop ->
         if asconst then
           ignore (warn "QUESTION with ADrop in constant");
-        let (se3,_,_) = doExp false e3 ADrop in
+        let se3 = doExp false e3 ADrop in
         let se2 =
           match e2 with
             A.NOTHING -> skipChunk
-          | _ -> let (se2,_,_) = doExp false e2 ADrop in se2
+          | _ -> let se2 = doExp false e2 ADrop in se2
         in
         finishExp (doCondition asconst e1 se2 se3) zero intType
       | _ -> begin (* what is not ADrop *)
@@ -5314,7 +5314,7 @@ and doCondition (isconst: bool) (* If we are in constants, we do our best to
                 (st: chunk)
                 (sf: chunk) : chunk =
   if (!Cil.removeBranchingOnConstants || isconst) && isEmpty st && isEmpty sf then
-    let se,_,_ = doExp isconst e ADrop in se
+    let se = doExp isconst e ADrop in se
   else
     compileCondExp isconst (doCondExp isconst e) st sf
 
@@ -6851,7 +6851,7 @@ and doStatement (s : A.statement) : chunk =
           data := Some (e', t');      (* Record the result *)
           s'
         end else
-          let (s', _, _) = doExp false e ADrop in
+          let s' = doExp false e ADrop in
             (* drop the side-effect free expression *)
             (* And now do some peep-hole optimizations *)
           s'
@@ -6904,10 +6904,10 @@ and doStatement (s : A.statement) : chunk =
         currentLoc := loc'; (* For loop statement location is not synthetic (see se1 comment below). *)
         currentExpLoc := SynthetizeLoc.doLoc fc_loc';
         enterScope (); (* Just in case we have a declaration *)
-        let (se1, _, _) =
+        let se1 =
           match fc1 with
             FC_EXP e1 -> doExp false e1 ADrop
-          | FC_DECL d1 -> (doDecl false false d1, zero, voidType) (* doDecl may modify currentLoc and currentExpLoc! *)
+          | FC_DECL d1 -> doDecl false false d1 (* doDecl may modify currentLoc and currentExpLoc! *)
         in
         (* First instruction (assignment) in for loop initializer has non-synthetic statement location before for loop.
            Its expression location inside for loop parentheses is synthetic.
@@ -6916,7 +6916,7 @@ and doStatement (s : A.statement) : chunk =
         (* Reset both locations due to doDecl (see above). *)
         currentLoc := loc'; (* TODO: Why is statement location not synthetic here? Not needed? *)
         currentExpLoc := SynthetizeLoc.doLoc e3_loc';
-        let (se3, _, _) = doExp false e3 ADrop in (* doExp does doChunkTail *)
+        let se3 = doExp false e3 ADrop in (* doExp does doChunkTail *)
         let se3 = SynthetizeLoc.doChunkHead se3 in (* So just doChunkHead is enough *)
         startLoop false;
         (* TODO: Are these locations ever used in doStatement? Why not synthetic? *)
@@ -6968,7 +6968,7 @@ and doStatement (s : A.statement) : chunk =
         (* Sometimes we return the result of a void function call *)
         if isVoidType !currentReturnType then begin
           ignore (warnOpt "Return statement with a value in function returning void");
-          let (se, _, _) = doExp false e ADrop in
+          let se = doExp false e ADrop in
           se @@ returnChunk None loc' eloc'
         end else begin
 	  let rt =
