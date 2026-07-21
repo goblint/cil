@@ -116,10 +116,6 @@ let applyPointer (ptspecs: attribute list list) (dt: decl_type)
 
 let doDeclaration (loc: cabsloc) (specs: spec_elem list) (nl: init_name list) : definition =
   Lexerhack.is_typedef_decl := false;
-  (* Lexer registrations (add_type / add_identifier) are done per-declarator in
-     init_declarator_hack as each declarator is parsed
-     (C11 6.2.1.7: scope begins just after the completion of the declarator), so
-     nothing to do here. *)
   if isTypedef specs then
     TYPEDEF ((specs, List.map (fun (n, _) -> n) nl), loc)
   else
@@ -1041,15 +1037,8 @@ init_declarator:                             /* ISO 6.7 */
                                         { let (n, d, a, l) = $1 in ((n, d, a, joinLoc l $4), $3) }
 ;
 
-/* (* Parses "declarator" (without initializer) and immediately registers the
-      declared name in the lexer hack, per C11 6.2.1.7 (scope begins just after
-      the completion of its declarator).
-      - For non-typedef declarations: calls add_identifier so subsequent
-        declarators in the same list see the name as a variable (not a type).
-      - For typedef declarations (Lexerhack.is_typedef_decl = true): calls add_type so
-        subsequent declarators see the name as a type.
-      In both cases every declarator is registered at the right time without
-      going through doDeclaration. *) */
+/* Parses "declarator" and immediately registers the declared name in the lexer hack,
+   per C11 6.2.1.7 (scope begins just after the completion of its declarator). */
 init_declarator_hack:
     declarator                          { let (n, _, _, _) = $1 in
                                           if !Lexerhack.is_typedef_decl then !Lexerhack.add_type n
