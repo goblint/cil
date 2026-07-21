@@ -4252,7 +4252,11 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                  lv, empty
              in
              let (se2, e'', t'') = doExp false e2 (ASet(tmplv, lvt)) in
-             finishExp (se1 @@ se2 @@ se3) (Lval tmplv) lvt
+             let newWhat = match what with
+               | ADrop -> AExpLeaveArrayFun
+               | what -> what
+             in
+             finishExp ~newWhat (se1 @@ se2 @@ se3) (Lval tmplv) lvt
            end
         | _ -> E.s (error "Invalid left operand for ASSIGN")
     end
@@ -4790,6 +4794,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
 
 
         (* Now we must finish the call *)
+        let pwhat' = ref what in
         if !piscall then begin
           let addCall (calldest: lval option) (res: exp) (t: typ) =
 	          let prev = !prechunk () in
@@ -4808,7 +4813,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
             prestype := t
           in
           match !pwhat with
-          | ADrop -> addCall None zero intType
+          | ADrop ->
+            pwhat' := AExpLeaveArrayFun;
+            addCall None zero intType
           | AType -> prestype := !resType'
           | ASet(lv, vtype) when !doCollapseCallCast || (Util.equals (typeSig vtype) (typeSig !resType')) ->
               (* We can assign the result directly to lv *)
@@ -4830,7 +4837,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           end
         end;
 
-        finishExp (!prechunk ()) !pres !prestype)
+        finishExp ~newWhat:!pwhat' (!prechunk ()) !pres !prestype)
 
 
     | A.COMMA el ->
