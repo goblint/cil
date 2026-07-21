@@ -3506,7 +3506,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
   let finishExp ?(newWhat=what)
                 (se: chunk) (e: exp) (t: typ) : chunk * exp * typ =
     match newWhat with
-      ADrop
+    | ADrop -> (SynthetizeLoc.doChunkTail (se +++ (Pure (e, !currentLoc))), e, t) (* TODO: also add eloc if comma expression inside if condition, etc. *)
     | AType -> (SynthetizeLoc.doChunkTail se, e, t)
     | AExpLeaveArrayFun ->
         (SynthetizeLoc.doChunkTail se, e, t) (* It is important that we do not do "processArrayFun" in
