@@ -4766,22 +4766,41 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                           prestype := intType
                   | _ -> ignore (warn "Invalid call to builtin_types_compatible_p");
                 end
-                else if fv.vname = "__builtin_clzll" && asconst && isEmpty (!prechunk ()) then
-                  begin
-                  (* Constant-fold the argument and see if it is a constant *)
-                    let countLeadingZeros (arg: cilint) pos = pos - Z.numbits arg
-                    in
-                    match !pargs with
-                      [ arg ] -> begin
-                        match constFold true arg with
-                          (Const CInt (arg, kind, _)) ->
-                            piscall := false;
-                            pres := integer (countLeadingZeros arg 64);
-                            prestype := intType
-                        | _ -> ()
-                      end
-                    | _ -> ignore (warn "Invalid call to __builtin_clzll");
-                  end
+              else if fv.vname = "__builtin_clzll" && asconst && isEmpty (!prechunk ()) then
+                begin
+                (* Constant-fold the argument and see if it is a constant *)
+                  let countLeadingZeros (arg: cilint) pos = pos - Z.numbits arg
+                  in
+                  match !pargs with
+                    [ arg ] -> begin
+                      match constFold true arg with
+                        (Const CInt (arg, kind, _)) ->
+                          piscall := false;
+                          pres := integer (countLeadingZeros arg 64);
+                          prestype := intType
+                      | _ -> ()
+                    end
+                  | _ -> ignore (warn "Invalid call to __builtin_clzll");
+                end
+              else if fv.vname = "__builtin_bswap16" && asconst && isEmpty (!prechunk ()) then (* to support pure switch cases in Linux kernel *)
+                begin
+                  match !pargs with
+                  | [ arg ] -> begin
+                      piscall := false;
+                      prestype := TInt (intKindForSize 2 true, []);
+                      let ipt = integralPromotion !prestype in (* arg has same type by builtins declarations *)
+                      let arg = makeCastT ~kind:IntegerPromotion ~e:arg ~oldt:!prestype ~newt:ipt in (* bitwise operators will promote uint16 to int *)
+                      let e =
+                        BinOp (BOr,
+                          BinOp (Shiftlt, arg, integer 8, ipt), (* shift has left promoted arg type *)
+                          BinOp (Shiftrt, arg, integer 8, ipt), (* shift has left promoted arg type *)
+                          ipt) (* bitwise or has arithmetic converted type (already promoted and same) *)
+                      in
+                      pres := makeCastT ~kind:Internal ~e ~oldt:ipt ~newt:!prestype (* force promoted int back to uint16 *)
+                    end
+                  | _ ->
+                    ignore (warn "Invalid call to builtin_bswap16");
+                end
             end
           | _ -> ()
         );
