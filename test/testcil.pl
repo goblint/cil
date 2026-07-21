@@ -694,6 +694,7 @@ addTest("runall/alpha");
 addTest("testrun/blockattr2 USECFG=1");
 addTest("testrun/extinline2");
 addTest("test/extinline3");
+addTest("test/extinline4");
 addTest("testrun/bool");
 addTest("testrun/var_named_hidden");
 addTest("testrun/macro_hidden");
