@@ -117,7 +117,7 @@ let applyPointer (ptspecs: attribute list list) (dt: decl_type)
 let doDeclaration (loc: cabsloc) (specs: spec_elem list) (nl: init_name list) : definition =
   Lexerhack.is_typedef_decl := false;
   (* Lexer registrations (add_type / add_identifier) are done per-declarator in
-     declarator_no_init / declarator_init_start as each declarator is parsed
+     init_declarator_hack as each declarator is parsed
      (C11 6.2.1.7: scope begins just after the completion of the declarator), so
      nothing to do here. *)
   if isTypedef specs then
@@ -388,7 +388,7 @@ let transformOffsetOf (speclist, dtype) member =
 
 %type <Cabs.init_name> init_declarator
 %type <Cabs.init_name list> init_declarator_list
-%type <Cabs.name> declarator declarator_no_init declarator_init_start
+%type <Cabs.name> declarator init_declarator_hack
 %type <Cabs.name * expression option> field_decl
 %type <(Cabs.name * expression option) list> field_decl_list
 %type <string * Cabs.decl_type> direct_decl
@@ -1036,9 +1036,9 @@ init_declarator_attr:
 
 ;
 init_declarator:                             /* ISO 6.7 */
-    declarator_no_init                  { ($1, NO_INIT) }
-|   declarator_init_start init_expression location
-                                        { let (n, d, a, l) = $1 in ((n, d, a, joinLoc l $3), $2) }
+    init_declarator_hack                { ($1, NO_INIT) }
+|   init_declarator_hack EQ init_expression location
+                                        { let (n, d, a, l) = $1 in ((n, d, a, joinLoc l $4), $3) }
 ;
 
 /* (* Parses "declarator" (without initializer) and immediately registers the
@@ -1050,19 +1050,11 @@ init_declarator:                             /* ISO 6.7 */
         subsequent declarators see the name as a type.
       In both cases every declarator is registered at the right time without
       going through doDeclaration. *) */
-declarator_no_init:
+init_declarator_hack:
     declarator                          { let (n, _, _, _) = $1 in
                                           if !Lexerhack.is_typedef_decl then !Lexerhack.add_type n
                                           else !Lexerhack.add_identifier n;
                                           $1 }
-;
-
-/* (* Parses "declarator =" and adds the declared name as a variable identifier
-      in the lexer hack, so that in the initializer the name shadows any typedef
-      with the same name (C11 6.2.1.7: scope begins just after the completion of the
-      declarator). *) */
-declarator_init_start:
-    declarator EQ                       { let (n, _, _, _) = $1 in !Lexerhack.add_identifier n; $1 }
 ;
 
 decl_spec_list_common:                  /* ISO 6.7 */
