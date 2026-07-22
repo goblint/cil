@@ -5969,7 +5969,7 @@ and createLocal ?allow_var_decl:(allow_var_decl=true) ((_, sto, _, _) as specs)
                                loc specs (newname, ndt, a) in
       (* Mark it as pulled up from a local static variable and retain its
          originating function. *)
-      vi.vattr <- Attr("goblint_cil_pulledup", [ACons(!currentFunctionFDEC.svar.vname, [])]) :: vi.vattr;
+      vi.vattr <- Attr("goblint_cil_pulledup", [AStr !currentFunctionFDEC.svar.vname]) :: vi.vattr;
       (if !addNestedScopeAttr then
         (* two scopes implies top-level scope in the function, one is created for the FUNDEF (includes formals etc),
            one for the body which is a block *)
