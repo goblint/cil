@@ -115,18 +115,14 @@ let applyPointer (ptspecs: attribute list list) (dt: decl_type)
   loop ptspecs
 
 let doDeclaration (loc: cabsloc) (specs: spec_elem list) (nl: init_name list) : definition =
-  if isTypedef specs then begin
-    (* Tell the lexer about the new type names *)
-    List.iter (fun ((n, _, _, _), _) -> !Lexerhack.add_type n) nl;
+  Lexerhack.is_typedef_decl := false;
+  if isTypedef specs then
     TYPEDEF ((specs, List.map (fun (n, _) -> n) nl), loc)
-  end else
+  else
     if nl = [] then
       ONLYTYPEDEF (specs, loc)
-    else begin
-      (* Tell the lexer about the new variable names *)
-      List.iter (fun ((n, _, _, _), _) -> !Lexerhack.add_identifier n) nl;
+    else
       DECDEF ((specs, nl), loc)
-    end
 
 
 let doFunctionDef (loc: cabsloc)
@@ -388,7 +384,7 @@ let transformOffsetOf (speclist, dtype) member =
 
 %type <Cabs.init_name> init_declarator
 %type <Cabs.init_name list> init_declarator_list
-%type <Cabs.name> declarator
+%type <Cabs.name> declarator init_declarator_hack
 %type <Cabs.name * expression option> field_decl
 %type <(Cabs.name * expression option) list> field_decl_list
 %type <string * Cabs.decl_type> direct_decl
@@ -1036,14 +1032,23 @@ init_declarator_attr:
 
 ;
 init_declarator:                             /* ISO 6.7 */
-    declarator                          { ($1, NO_INIT) }
-|   declarator EQ init_expression location
+    init_declarator_hack                { ($1, NO_INIT) }
+|   init_declarator_hack EQ init_expression location
                                         { let (n, d, a, l) = $1 in ((n, d, a, joinLoc l $4), $3) }
+;
+
+/* Parses "declarator" and immediately registers the declared name in the lexer hack,
+   per C11 6.2.1.7 (scope begins just after the completion of its declarator). */
+init_declarator_hack:
+    declarator                          { let (n, _, _, _) = $1 in
+                                          if !Lexerhack.is_typedef_decl then !Lexerhack.add_type n
+                                          else !Lexerhack.add_identifier n;
+                                          $1 }
 ;
 
 decl_spec_list_common:                  /* ISO 6.7 */
                                         /* ISO 6.7.1 */
-|   TYPEDEF decl_spec_list_opt          { SpecTypedef :: $2, $1  }
+|   TYPEDEF decl_spec_list_opt          { Lexerhack.is_typedef_decl := true; SpecTypedef :: $2, $1  }
 |   EXTERN decl_spec_list_opt           { SpecStorage EXTERN :: $2, $1 }
 |   STATIC  decl_spec_list_opt          { SpecStorage STATIC :: $2, $1 }
 |   AUTO   decl_spec_list_opt           { SpecStorage AUTO :: $2, $1 }
