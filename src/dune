@@ -62,11 +62,21 @@
  (target gcc64model)
  (action (with-stdout-to %{target} (run ./modelConfigure.exe --real-gcc %{read-lines:../bin/real-gcc} -m 64))))
 
+; separate rules for Windows and non-Windows due to different command line prefix
 (rule
- (deps machdep32 machdep64)
+ (enabled_if (<> %{os_type} Win32))
+ (deps machdep32 machdep64 machdep-ml.exe)
  (target machdep.ml)
  (action (run %{bin:cppo} -V OCAML:%{ocaml_version}
-              %{dep:machdep.cppo.ml} -x machdep:./%{dep:machdep-ml.exe}
+              %{dep:machdep.cppo.ml} -x machdep:./machdep-ml.exe
+              -o %{target})))
+
+(rule
+ (enabled_if (= %{os_type} Win32))
+ (deps machdep32 machdep64 machdep-ml.exe)
+ (target machdep.ml)
+ (action (run %{bin:cppo} -V OCAML:%{ocaml_version}
+              %{dep:machdep.cppo.ml} -x "machdep:.\\machdep-ml.exe"
               -o %{target})))
 
 (ocamllex formatlex)
