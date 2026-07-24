@@ -5967,6 +5967,17 @@ and createLocal ?allow_var_decl:(allow_var_decl=true) ((_, sto, _, _) as specs)
       let vi = makeVarInfoCabs ~isformal:false
                                ~isglobal:true
                                loc specs (newname, ndt, a) in
+      (* Mark it as pulled up from a local static variable and retain its
+         originating function. *)
+      vi.vattr <- Attr("goblint_cil_pulledup", [AStr !currentFunctionFDEC.svar.vname]) :: vi.vattr;
+      (if !addNestedScopeAttr then
+        (* two scopes implies top-level scope in the function, one is created for the FUNDEF (includes formals etc),
+           one for the body which is a block *)
+        match !scopes with
+        | _::_::_::_ ->
+          (* i.e.  List.length scopes > 2 *)
+          vi.vattr <- Attr("goblint_cil_nested", []) :: vi.vattr
+        | _ -> ());
       (* However, we have a problem if a real global appears later with the
          name that we have happened to choose for this one. Remember these names
          for later. *)
