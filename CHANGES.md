@@ -1,5 +1,9 @@
 ## 2.1.1
 * Add attribute `goblint_cil_pulledup` to static variables pulled up from local scope to global scope (#225, #226).
+* Add pure `__builtin_bswap16` evaluation (#202).
+* Fix `typedef` and variable name conflict parsing error (#114, #219).
+* Fix `extern inline` function declaration dropping definition (#227).
+* Fix `Machdep` generation on Windows (#231).
 
 ## 2.1.0
 * Add cast kinds (#179, #199).
