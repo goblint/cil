@@ -842,6 +842,7 @@ module BlockChunk =
         {l with synthetic = true}
 
       let doInstr: instr -> instr = function
+        | Pure (e, loc) -> Pure (e, doLoc loc)
         | Set (l, e, loc, eloc) -> Set (l, e, doLoc loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, doLoc loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, doLoc loc, doLoc eloc)
@@ -936,6 +937,7 @@ module BlockChunk =
           c
 
       let eDoInstr: instr -> instr = function
+        | Pure (e, loc) -> Pure (e, doLoc loc)
         | Set (l, e, loc, eloc) -> Set (l, e, loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, loc, doLoc eloc)
@@ -3504,7 +3506,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
   let finishExp ?(newWhat=what)
                 (se: chunk) (e: exp) (t: typ) : chunk * exp * typ =
     match newWhat with
-      ADrop
+    | ADrop -> (SynthetizeLoc.doChunkTail (se +++ (Pure (e, !currentLoc))), e, t) (* TODO: also add eloc if comma expression inside if condition, etc. *)
     | AType -> (SynthetizeLoc.doChunkTail se, e, t)
     | AExpLeaveArrayFun ->
         (SynthetizeLoc.doChunkTail se, e, t) (* It is important that we do not do "processArrayFun" in
@@ -4250,7 +4252,11 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                  lv, empty
              in
              let (se2, e'', t'') = doExp false e2 (ASet(tmplv, lvt)) in
-             finishExp (se1 @@ se2 @@ se3) (Lval tmplv) lvt
+             let newWhat = match what with
+               | ADrop -> AExpLeaveArrayFun
+               | what -> what
+             in
+             finishExp ~newWhat (se1 @@ se2 @@ se3) (Lval tmplv) lvt
            end
         | _ -> E.s (error "Invalid left operand for ASSIGN")
     end
@@ -4807,6 +4813,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
 
 
         (* Now we must finish the call *)
+        let pwhat' = ref what in
         if !piscall then begin
           let addCall (calldest: lval option) (res: exp) (t: typ) =
 	          let prev = !prechunk () in
@@ -4825,7 +4832,9 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
             prestype := t
           in
           match !pwhat with
-          | ADrop -> addCall None zero intType
+          | ADrop ->
+            pwhat' := AExpLeaveArrayFun;
+            addCall None zero intType
           | AType -> prestype := !resType'
           | ASet(lv, vtype) when !doCollapseCallCast || (Util.equals (typeSig vtype) (typeSig !resType')) ->
               (* We can assign the result directly to lv *)
@@ -4847,7 +4856,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           end
         end;
 
-        finishExp (!prechunk ()) !pres !prestype)
+        finishExp ~newWhat:!pwhat' (!prechunk ()) !pres !prestype)
 
 
     | A.COMMA el ->
@@ -6533,7 +6542,8 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
                unnecessary warning than to break CIL's invariant that
                return statements are inserted properly.  *)
             let instrFallsThrough (i : instr) = match i with
-              Set _ -> true
+            | Pure _
+            | Set _ -> true
             | Call (None, Lval (Var e, NoOffset), _, _, _) ->
                 (* See if this is exit, or if it has the noreturn attribute *)
                 if e.vname = "exit" then false

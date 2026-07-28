@@ -275,7 +275,8 @@ let getDefRhs didstmh stmdat defId =
 	      | _ -> false)
 	  | None -> false) iihl in
 	(match i with
-	  Set((lh,_),e,_,_) ->
+  | Pure _ -> assert false (* Pure cannot define *)
+	| Set((lh,_),e,_,_) ->
 	    (match lh with
 	      Var(vi') ->
 		(IH.add rhsHtbl defId (Some(RDExp(e),stm.sid,iosh_in));
