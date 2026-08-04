@@ -2,11 +2,11 @@
 
 /* Test that integer promotions for bit-fields correctly account for the
    bit-field width (c.f. ISO 6.3.1.1).
-   A bit-field of type int or unsigned int whose values fit in int
-   shall be promoted to int. */
+   A bit-field whose values fit in int shall be promoted to int, including
+   GCC's extended bit-field base types. */
 
 struct X {
-  int x : 7;   /* signed int 7-bit: range fits in int -> promote to int */
+  long x : 7;   /* signed long 7-bit: range fits in int -> promote to int */
 } sx;
 
 struct UX {
@@ -14,8 +14,8 @@ struct UX {
 } usx;
 
 int main() {
-  /* _Generic selects based on type after integer promotion (ISO 6.5.1.1).
-     For int : 7 bit-field, the promoted type should be int. */
+  /* _Generic selects based on type after integer promotion if one occurred (ISO 6.5.1.1).
+     For long : 7 bit-field, the promoted type should be int. */
   int r1 = _Generic(sx.x + 0, int : 1, default : -1);
   if (r1 != 1) E(1);
 
@@ -35,9 +35,9 @@ int main() {
   int r5 = _Generic(usx.y + 0, int : 1, default : -1);
   if (r5 != 1) E(5);
 
-  /* Direct bit-field access as _Generic controlling expression */
+  /* Direct bit-field access does not itself trigger integer promotion. */
   int r6 = _Generic(sx.x, int : 1, default : -1);
-  if (r6 != 1) E(6);
+  if (r6 != -1) E(6);
 
   SUCCESS;
 }

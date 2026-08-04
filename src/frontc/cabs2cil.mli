@@ -131,7 +131,7 @@ val currentFunctionFDEC: Cil.fundec ref
 val integralPromotion: ?width:int -> Cil.typ -> Cil.typ
 
 (** c.f. ISO 6.3.1.8 *)
-val arithmeticConversion: Cil.typ -> Cil.typ -> Cil.typ
+val arithmeticConversion: ?width1:int -> ?width2:int -> Cil.typ -> Cil.typ -> Cil.typ
 
 (** Construct {!Cil.BinOp} with correct implicit casts inserted.  *)
 val doBinOp: Cil.binop -> Cil.exp -> Cil.typ -> Cil.exp -> Cil.typ -> Cil.typ * Cil.exp
