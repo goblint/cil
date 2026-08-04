@@ -13,6 +13,11 @@ struct UX {
   unsigned int y : 7;  /* unsigned int 7-bit: range [0,127] fits in int -> promote to int */
 } usx;
 
+struct LX {
+  /* One bit wider than int: its range is too large to fit in int. */
+  long z : sizeof(int) * 8 + 1;
+} lsx;
+
 int main() {
   /* _Generic selects based on type after integer promotion if one occurred (ISO 6.5.1.1).
      For long : 7 bit-field, the promoted type should be int. */
@@ -38,6 +43,10 @@ int main() {
   /* Direct bit-field access does not itself trigger integer promotion. */
   int r6 = _Generic(sx.x, int : 1, default : -1);
   if (r6 != -1) E(6);
+
+  /* A bit-field whose range does not fit in int is not promoted to int. */
+  int r7 = _Generic(lsx.z + 0, long : 1, default : -1);
+  if (r7 != 1) E(7);
 
   SUCCESS;
 }
