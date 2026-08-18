@@ -150,12 +150,6 @@ class useDefVisitorClass : cilVisitor = object (self)
         E.s (bug "bad call to %s" vi.vname)
     | Call (lvo, f, args, _, _) ->
         doCall f lvo args
-    | Asm(_,_,slvl,_,_,_) -> List.iter (fun (_,s,lv) ->
-	match lv with (Var v, off) ->
-	  if s.[0] = '+' then
-	    varUsed := VS.add v !varUsed;
-	| _ -> ()) slvl;
-	DoChildren
     | _ -> DoChildren
 
 end
@@ -200,6 +194,11 @@ let computeUseDefStmtKind ?(acc_used=VS.empty)
     | Instr il ->
         List.iter (fun i -> ignore (visitCilInstr useDefVisitor i)) il
     | Block _ -> ()
+    | Asm {outputs = slvl; _} -> List.iter (fun (_,s,lv) ->
+      match lv with (Var v, off) ->
+        if s.[0] = '+' then
+          varUsed := VS.add v !varUsed;
+      | _ -> ()) slvl;
   in
   !varUsed, !varDefs
 
@@ -242,6 +241,11 @@ let rec computeDeepUseDefStmtKind ?(acc_used=VS.empty)
       List.iter (fun i -> ignore (visitCilInstr useDefVisitor i)) il;
       !varUsed, !varDefs
   | Block b -> handle_block b
+  | Asm _ -> 
+      computeUseDefStmtKind 
+        ~acc_used:!varUsed
+        ~acc_defs:!varDefs
+        sk
 
 let computeUseLocalTypes ?(acc_used=VS.empty)
                          (fd : fundec)

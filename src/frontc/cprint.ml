@@ -730,22 +730,26 @@ and print_statement stat =
         print_attributes attrs;
         print "(";
         print_list (fun () -> new_line()) print_string tlist; (* templates *)
-	begin
-	  match details with
-	  | None -> ()
-	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs } ->
+        begin
+          match details with
+          | None -> ()
+          | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs; agotos = labels } ->
               print ":"; space ();
               print_commas false print_asm_operand outs;
-              if ins <> [] || clobs <> [] then begin
-		print ":"; space ();
-		print_commas false print_asm_operand ins;
-		if clobs <> [] then begin
-		  print ":"; space ();
-		  print_commas false print_string clobs
-		end;
-              end
-	end;
-        print ");"
+              if ins <> [] || clobs <> [] || labels <> [] then begin
+                print ":"; space ();
+                print_commas false print_asm_operand ins;
+                if clobs <> [] || labels <> [] then begin
+                  print ":"; space ();
+                  print_commas false print_string clobs;
+                  if labels <> [] then begin
+                    print ":"; space ();
+                    print_commas false print labels
+                  end
+                end;
+              end;
+        end;
+        print ");";
       end;
       new_line ()
 

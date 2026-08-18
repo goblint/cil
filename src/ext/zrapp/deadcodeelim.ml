@@ -80,6 +80,15 @@ class usedDefsCollectorClass = object(self)
     ignore(super#vstmt s);
     match s.skind with
     | Instr _ -> DoChildren
+    | Asm {outputs = slvl; _} -> begin match self#get_cur_iosh() with
+      | Some iosh -> List.iter (fun (_,s,lv) ->
+        match lv with (Var v, off) ->
+          if s.[0] = '+' then
+            self#add_defids iosh (Lval(Var v, off)) (UD.VS.singleton v)
+        | _ -> ()) slvl;
+        DoChildren
+      | None -> DoChildren
+    end
     | _ -> begin
 	let u,d = UD.computeUseDefStmtKind s.skind in
 	match self#get_cur_iosh() with
@@ -102,12 +111,7 @@ class usedDefsCollectorClass = object(self)
 
   method! vinst i =
     let handle_inst iosh i = match i with
-    | Asm(_,_,slvl,_,_,_) -> List.iter (fun (_,s,lv) ->
-	match lv with (Var v, off) ->
-	  if s.[0] = '+' then
-	    self#add_defids iosh (Lval(Var v, off)) (UD.VS.singleton v)
-	| _ -> ()) slvl
-    | Call(_,ce,el,_,_) when not (!callHasNoSideEffects i) ->
+     | Call(_,ce,el,_,_) when not (!callHasNoSideEffects i) ->
 	List.iter (fun e ->
 	  let u = UD.computeUseExp e in
 	  UD.VS.iter (fun vi ->

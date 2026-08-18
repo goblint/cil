@@ -1021,49 +1021,15 @@ and stmtkind =
     (** Just a block of statements. Use it as a way to keep some block
        attributes local *)
 
-(** {b Instructions}.
- An instruction {!instr} is a statement that has no local
-(intraprocedural) control flow. It can be either an assignment,
-function call, or an inline assembly instruction. *)
-
-(** Instructions. *)
-and instr =
-  Set        of lval * exp * location * location
-   (** An assignment. The type of the expression is guaranteed to be the same
-      with that of the lvalue.
-      Second location is just for expression when inside condition. *)
-  | VarDecl    of varinfo * location
-   (** "Instruction" in the location where a varinfo was declared.
-       All varinfos for which such a VarDecl instruction exists have
-       vhasdeclinstruction set to true.
-       The motivation for the addition of this instruction was to support VLAs
-       for which declerations can not be pulled up like CIL used to do.
-    *)
-  | Call       of lval option * exp * exp list * location * location
-   (** A function call with the (optional) result placed in an lval. It is
-      possible that the returned type of the function is not identical to
-      that of the lvalue. In that case a cast is printed. The type of the
-      actual arguments are identical to those of the declared formals. The
-      number of arguments is the same as that of the declared formals, except
-      for vararg functions. This construct is also used to encode a call to
-      "__builtin_va_arg". In this case the second argument (which should be a
-      type T) is encoded SizeOf(T).
-      Second location is just for expression when inside condition. *)
-
-  | Asm        of attributes * (* Really only const and volatile can appear
-                                 here *)
-                  string list *         (* templates (CR-separated) *)
-                  (string option * string * lval) list *
-                                          (* outputs must be lvals with
-                                             optional names and constraints.
-                                             I would like these
-                                             to be actually variables, but I
-                                             run into some trouble with ASMs
-                                             in the Linux sources  *)
-                  (string option * string * exp) list *
-                                        (* inputs with optional names and constraints *)
-                  string list *         (* register clobbers *)
-                  location
+  | Asm of {
+      attr: attributes; (** Really only [const], [volatile], [inline] and [goto] can appear here *)
+      template: string list; (** templates (CR-separated) *)
+      outputs: (string option * string * lval) list; (** outputs must be lvals with optional names and constraints. *) (* TODO: I would like these to be actually variables, but I run into some trouble with ASMs in the Linux sources  *)
+      inputs: (string option * string * exp) list; (** inputs with optional names and constraints *)
+      clobbers: string list; (** register clobbers *)
+      gotos: stmt ref list; (** gotos *)
+      loc: location
+    }
     (** There are for storing inline assembly. They follow the GCC
         specification:
 {v
@@ -1112,6 +1078,35 @@ an example (from gcc manual):
  v}
 
 *)
+
+(** {b Instructions}.
+ An instruction {!instr} is a statement that has no local
+(intraprocedural) control flow. It can be either an assignment,
+function call, or a variable declaration. *)
+
+(** Instructions. *)
+and instr =
+  Set        of lval * exp * location * location
+   (** An assignment. The type of the expression is guaranteed to be the same
+      with that of the lvalue.
+      Second location is just for expression when inside condition. *)
+  | VarDecl    of varinfo * location
+   (** "Instruction" in the location where a varinfo was declared.
+       All varinfos for which such a VarDecl instruction exists have
+       vhasdeclinstruction set to true.
+       The motivation for the addition of this instruction was to support VLAs
+       for which declerations can not be pulled up like CIL used to do.
+    *)
+  | Call       of lval option * exp * exp list * location * location
+   (** A function call with the (optional) result placed in an lval. It is
+      possible that the returned type of the function is not identical to
+      that of the lvalue. In that case a cast is printed. The type of the
+      actual arguments are identical to those of the declared formals. The
+      number of arguments is the same as that of the declared formals, except
+      for vararg functions. This construct is also used to encode a call to
+      "__builtin_va_arg". In this case the second argument (which should be a
+      type T) is encoded SizeOf(T).
+      Second location is just for expression when inside condition. *)
 
 (** Describes a location in a source file. *)
 and location = {
@@ -1765,10 +1760,7 @@ val compactStmts: stmt list -> stmt list
 (** Returns an empty statement (of kind [Instr]) *)
 val mkEmptyStmt: unit -> stmt
 
-(** A instr to serve as a placeholder *)
-val dummyInstr: instr
-
-(** A statement consisting of just [dummyInstr] *)
+(** A statement to serve as a placeholder *)
 val dummyStmt: stmt
 
 (** Make a while loop. Can contain Break or Continue *)
@@ -2667,8 +2659,8 @@ val get_stmtLoc: stmtkind -> location
 (** Generate an {!exp} to be used in case of errors. *)
 val dExp: Pretty.doc -> exp
 
-(** Generate an {!instr} to be used in case of errors. *)
-val dInstr: Pretty.doc -> location -> instr
+(** Generate an {!stmt} to be used in case of errors. *)
+val dStmt: Pretty.doc -> location -> stmt
 
 (** Generate a {!global} to be used in case of errors. *)
 val dGlobal: Pretty.doc -> location -> global

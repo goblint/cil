@@ -182,6 +182,13 @@ addTest("test/asm3 _GNUCC=1");
 addTest("test/asm4 _GNUCC=1");
 addTest("test/asm_emptyclobberallowed _GNUCC=1");
 addTest("testobj/asm5 _GNUCC=1");
+addTest("test/asm_goto0");
+addTestFail("test/asm_goto1", "expected non-empty labels list in asm goto");
+addTestFail("test/asm_goto2", "expected non-empty labels list in asm goto");
+addTest("test/asm_goto3");
+addTestFail("test/asm_goto4", "labels provided in inline asm without goto attribute");
+addTestFail("test/asm_goto5", "Error: Label start not found");
+addTestFail("test/asm_goto6", "expected non-empty labels list in asm goto");
 
 addTest("testrun/offsetof");
 addTest("testrun/offsetof1");

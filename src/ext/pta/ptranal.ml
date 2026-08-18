@@ -298,7 +298,6 @@ let analyze_instr (i : instr ) : unit =
                   Some r -> A.assign_ret site (analyze_lval r) fnres
                 | None -> ()
             end
-    | Asm _ -> ()
     | VarDecl _ -> ()
 
 let rec analyze_stmt (s : stmt ) : unit =
@@ -328,6 +327,7 @@ let rec analyze_stmt (s : stmt ) : unit =
     | Block b -> analyze_block b
     | Break l -> ()
     | Continue l -> ()
+    | Asm _ -> ()
 
 
 and analyze_block (b : block ) : unit =

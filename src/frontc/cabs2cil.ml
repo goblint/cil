@@ -845,7 +845,6 @@ module BlockChunk =
         | Set (l, e, loc, eloc) -> Set (l, e, doLoc loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, doLoc loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, doLoc loc, doLoc eloc)
-        | Asm (a, b, c, d, e, loc) -> Asm (a, b, c, d, e, doLoc loc)
 
       (** Change all stmt and instr locs to synthetic, except the first one.
           Expressions/initializers that expand to multiple instructions cannot have intermediate locations referenced. *)
@@ -883,6 +882,7 @@ module BlockChunk =
             | Block b ->
               doBlock ~first b;
               s.skind
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock ~first b =
           doStmts ~first b.bstmts
         and doStmts ~first = function
@@ -921,6 +921,7 @@ module BlockChunk =
             | Block b ->
               doBlock b;
               s.skind
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock b =
           doStmts b.bstmts
         and doStmts = function
@@ -939,7 +940,6 @@ module BlockChunk =
         | Set (l, e, loc, eloc) -> Set (l, e, loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, loc, doLoc eloc)
-        | Asm (a, b, c, d, e, loc) -> Asm (a, b, c, d, e, loc)
 
       (** Change first stmt or instr eloc to synthetic. *)
       let eDoChunkHead (c: chunk): chunk =
@@ -964,6 +964,7 @@ module BlockChunk =
             | Block b ->
               doBlock b;
               s.skind
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock b =
           doStmts b.bstmts
         and doStmts = function
@@ -5101,7 +5102,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
   with e when continueOnError -> begin
     (*ignore (E.log "error in doExp (%s)" (Printexc.to_string e));*)
     E.hadErrors := true;
-    (i2c (dInstr (dprintf "booo_exp(%t)" d_thisloc) !currentLoc),
+    (s2c (dStmt (dprintf "booo_exp(%t)" d_thisloc) !currentLoc),
      integer 0, intType)
   end
 
@@ -6540,7 +6541,6 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
                 else if hasAttribute "noreturn" e.vattr then false
                 else true
             | Call _ -> true
-            | Asm _ -> true
             | VarDecl _ -> true
             in
             let rec stmtFallsThrough (s: stmt) : bool =
@@ -6572,6 +6572,7 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
                   (* A loop falls through if it can break. *)
                   blockCanBreak b
               | Block b -> blockFallsThrough b
+              | Asm _ -> true
             and blockFallsThrough b =
               let rec fall = function
                   [] -> true
@@ -6609,7 +6610,7 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
             (* will we leave this statement or block with a break command? *)
             and stmtCanBreak (s: stmt) : bool =
               match s.skind with
-                Instr _ | Return _ | Continue _ | Goto _ | ComputedGoto _ -> false
+                Instr _ | Return _ | Continue _ | Goto _ | ComputedGoto _ | Asm _ -> false
               | Break _ -> true
               | If (_, b1, b2, _, _) ->
                   blockCanBreak b1 || blockCanBreak b2
@@ -7113,7 +7114,7 @@ and doStatement (s : A.statement) : chunk =
         currentLoc := loc';
         currentExpLoc := loc'; (* for argument doExp below *)
         let stmts : chunk ref = ref empty in
-	let (tmpls', outs', ins', clobs') =
+	let (tmpls', outs', ins', clobs', gotos') =
 	  match details with
 	  | None ->
 	      let tmpls' =
@@ -7121,8 +7122,8 @@ and doStatement (s : A.statement) : chunk =
 		      let escape = Str.global_replace pattern "%%" in
 		      Util.list_map escape tmpls
 	      in
-	      (tmpls', [], [], [])
-	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs } ->
+	      (tmpls', [], [], [], [])
+	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs; agotos = gotos } ->
               let outs' =
 		Util.list_map
 		  (fun (id, c, e) ->
@@ -7145,10 +7146,16 @@ and doStatement (s : A.statement) : chunk =
 		    (id, c, e'))
 		  ins
               in
-	      (tmpls, outs', ins', clobs)
+          let gotos' = List.map (fun l -> 
+              let gref = ref dummyStmt in
+              addGoto (lookupLabel l) gref;
+              gref
+            ) gotos
+            in
+	      (tmpls, outs', ins', clobs, gotos')
 	in
         !stmts @@
-        (i2c (Asm(attr', tmpls', outs', ins', clobs', loc')))
+        s2c (mkStmt (Asm {attr = attr'; template = tmpls'; outputs = outs'; inputs = ins'; clobbers = clobs'; gotos = gotos'; loc = loc'}))
 
   with e when continueOnError -> begin
     (ignore (E.log "Error in doStatement (%s)\n" (Printexc.to_string e)));
