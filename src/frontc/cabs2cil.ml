@@ -1360,24 +1360,51 @@ type condExpRes =
   | CENot of condExpRes
 
 (******** CASTS *********)
-let rec integralPromotion (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
-  match unrollType t with
-    TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
-  | TInt ((IShort|IUShort|IChar|ISChar|IUChar) as ik, a) ->
+let rec integralPromotion ?width (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
+  match width, unrollType t with
+  | _, TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
+  | None, TInt ((IShort|IUShort|IChar|ISChar|IUChar) as ik, a) ->
+      (* Standard integer promotion: types narrower than int promote to int or unsigned int *)
       if bitsSizeOf t < bitsSizeOf (TInt (IInt, [])) || isSigned ik then
 	TInt(IInt, a)
       else
 	TInt(IUInt, a)
-  | TInt _ -> t
-  | TEnum (ei, a) -> integralPromotion (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
-  | t -> E.s (error "integralPromotion: not expecting %a" d_type t)
+  | None, TInt _ -> t (* int, unsigned int, long, etc. are unchanged by integer promotions *)
+  | Some w, TInt (ik, a) ->
+      (* Bit-field-aware integer promotion. (ISO 6.3.1.1) *)
+      let int_bits = bitsSizeOf (TInt (IInt, [])) in
+      if w < int_bits then TInt (IInt, a)
+      else if w = int_bits then
+        if isSigned ik then TInt (IInt, a) else TInt (IUInt, a)
+      else t
+  | _, TEnum (ei, a) -> integralPromotion ?width (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
+  | _, t -> E.s (error "integralPromotion: not expecting %a" d_type t)
+
+(* If the lvalue ends in a bit-field access, return the bit-field width;
+   otherwise return None. Handles nested field accesses (e.g. s.inner.bf)
+   by examining the last field in the offset chain. *)
+let bitfieldWidthOfLval ((_, off) : lval) : int option =
+  let rec lastBitfieldInOffset = function
+    | NoOffset -> None
+    | Field (fi, NoOffset) -> fi.fbitfield
+    | Field (_, sub) -> lastBitfieldInOffset sub
+    | Index (_, sub) -> lastBitfieldInOffset sub
+  in
+  lastBitfieldInOffset off
+
+(* Apply integer promotion considering a possible bit-field restriction.
+   If [e] is a bit-field lvalue, uses its width; otherwise falls back to
+   the regular integralPromotion. *)
+let integralPromotionE (e : exp) (t : typ) : typ =
+  let width = match e with Lval lv -> bitfieldWidthOfLval lv | _ -> None in
+  integralPromotion ?width t
 
 let defaultArgumentPromotion (t : typ) : typ = (* c.f. ISO 6.5.2.2:6 *)
   match unrollType t with
   | TFloat (FFloat, a) -> TFloat (FDouble, a)
   | _ -> if isIntegralType t then integralPromotion t else t
 
-let arithmeticConversion    (* c.f. ISO 6.3.1.8 *)
+let arithmeticConversion ?width1 ?width2    (* c.f. ISO 6.3.1.8 *)
     (t1: typ)
     (t2: typ) : typ =
   let resultingFType fkind1 t1 fkind2 t2 =
@@ -1409,8 +1436,8 @@ let arithmeticConversion    (* c.f. ISO 6.3.1.8 *)
   | TFloat(_, _), _ -> t1
   | _, TFloat(_, _) -> t2
   | _, _ -> begin
-      let t1' = integralPromotion t1 in
-      let t2' = integralPromotion t2 in
+      let t1' = integralPromotion ?width:width1 t1 in
+      let t2' = integralPromotion ?width:width2 t2 in
       match unrollType t1', unrollType t2' with
 
       (* If both operands have the same type, then no further
@@ -4028,7 +4055,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | A.UNARY(A.MINUS, e) ->
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
-          let tres = integralPromotion t in
+          let tres = integralPromotionE e' t in
           let e'' = UnOp(Neg, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
           finishExp se e'' tres
         else
@@ -4040,7 +4067,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | A.UNARY(A.BNOT, e) ->
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
-          let tres = integralPromotion t in
+          let tres = integralPromotionE e' t in
           let e'' = UnOp(BNot, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
           finishExp se e'' tres
         else
@@ -4049,7 +4076,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | A.UNARY(A.PLUS, e) ->
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
-          let tres = integralPromotion t in
+          let tres = integralPromotionE e' t in
           let e'' = makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres in
           finishExp se e'' tres
         else
@@ -5084,6 +5111,10 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         in
         let (_, _, e_typ) = doExp false e (AExp None) in (* doExp with AExp handles array and function types for "lvalue conversions" (AType would not!) *)
         let e_typ = removeOuterQualifierAttributes e_typ in (* removeOuterQualifierAttributes handles qualifiers for "lvalue conversions" *)
+        (* The generic selection itself does not perform integer promotion.
+           If the controlling expression contains an operator which requires
+           promotion, doExp has already given that expression its promoted
+           result type; a bare lvalue keeps its unpromoted type. *)
         let al_compatible = List.filter (fun ((ast, adt), _) -> typ_compatible e_typ (doOnlyType ast adt)) al_nondefault in
 
         (* TODO: error when multiple compatible associations or defaults even when unused? *)
@@ -5109,21 +5140,25 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
 (* bop is always the arithmetic version. Change it to the appropriate pointer
    version if necessary *)
 and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
+  (* Pass bit-field widths into the conversions so each operand undergoes
+     integer promotion exactly once. *)
+  let width1 = match e1 with Lval lv -> bitfieldWidthOfLval lv | _ -> None in
+  let width2 = match e2 with Lval lv -> bitfieldWidthOfLval lv | _ -> None in
   let doArithmetic () =
-    let tres = arithmeticConversion t1 t2 in
+    let tres = arithmeticConversion ?width1 ?width2 t1 t2 in
     (* Keep the operator since it is arithmetic *)
     tres,
     optConstFoldBinOp false bop (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) tres
   in
   let doArithmeticComp () =
-    let tres = arithmeticConversion t1 t2 in
+    let tres = arithmeticConversion ?width1 ?width2 t1 t2 in
     (* Keep the operator since it is arithmetic *)
     intType,
     optConstFoldBinOp false bop
       (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) intType
   in
   let doIntegralArithmetic () =
-    let tres = unrollType (arithmeticConversion t1 t2) in
+    let tres = unrollType (arithmeticConversion ?width1 ?width2 t1 t2) in
     match tres with
       TInt _ ->
         tres,
@@ -5144,8 +5179,8 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
   | (Mod|BAnd|BOr|BXor) -> doIntegralArithmetic ()
   | (Shiftlt|Shiftrt) -> (* ISO 6.5.7. Only integral promotions. The result
                             has the same type as the left hand side *)
-      let t1' = integralPromotion t1 in
-      let t2' = integralPromotion t2 in
+      let t1' = integralPromotion ?width:width1 t1 in
+      let t2' = integralPromotion ?width:width2 t2 in
       t1',
       optConstFoldBinOp false bop (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:t1') (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:t2') t1'
 
@@ -5157,15 +5192,15 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
   | PlusA when isPointerType t1 && isIntegralType t2 ->
       t1,
       optConstFoldBinOp false PlusPI e1
-        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion t2)) t1
+        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion ?width:width2 t2)) t1
   | PlusA when isIntegralType t1 && isPointerType t2 ->
       t2,
       optConstFoldBinOp false PlusPI e2
-        (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:(integralPromotion t1)) t2
+        (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:(integralPromotion ?width:width1 t1)) t2
   | MinusA when isPointerType t1 && isIntegralType t2 ->
       t1,
       optConstFoldBinOp false MinusPI e1
-        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion t2)) t1
+        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion ?width:width2 t2)) t1
   | MinusA when isPointerType t1 && isPointerType t2 ->
       let commontype = t1 in
       !ptrdiffType,
@@ -7001,7 +7036,7 @@ and doStatement (s : A.statement) : chunk =
         let (se, e', et) = doExp false e (AExp None) in
         if not (Cil.isIntegralType et) then
           E.s (error "Switch on a non-integer expression.");
-        let et' = integralPromotion et in
+        let et' = integralPromotionE e' et in
         let e' = makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:et ~newt:et' in
         enter_break_env ();
         let s' = doStatement s in
