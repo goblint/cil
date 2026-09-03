@@ -4438,11 +4438,21 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           | Lval (Var {vname= ("__builtin_nan" | "__builtin_nanf" | "__builtin_nanl" | "__builtin_nans" | "__builtin_nansf" | "__builtin_nansl"); _}, NoOffset) -> true
           | _ -> false
         in
+        let isSparseBuiltin =
+          match f'' with
+          | Lval (Var {vname= ("__context__"); _}, NoOffset) ->
+              ignore (warn "Ignoring __context__ builtin of Linux kernel Sparse");
+              true
+          | _ -> false
+        in
         if isBuiltinNan && asconst then
           (* Replace call to builtin nan with computation yielding NaN *)
           let onef = Const(CReal(0.0,FDouble,None)) in
           let zerodivzero = mkCast ~kind:Internal ~e:(BinOp(Div,onef,onef,doubleType)) ~newt:resType in
           (empty,zerodivzero,resType)
+        else if isSparseBuiltin then
+          let one = Const(CInt(cilint_of_int 1, IInt, None)) in
+          (empty, one, intType)
         else (
         (* If the "--forceRLArgEval" flag was used, make sure
           we evaluate args right-to-left.
