@@ -842,7 +842,10 @@ and stmtkind =
 (** Instructions. They may cause effects directly but may not have control
     flow.*)
 and instr =
-    Set        of lval * exp * location * location  (** An assignment. A cast is present
+  | Pure of exp * location * location
+    (** Side-effect-less expression evaluation.
+        Second location is just for expression when inside condition. *)
+  | Set        of lval * exp * location * location  (** An assignment. A cast is present
                                              if the exp has different type
                                              from lval.
                                              Second location is just for expression when inside condition. *)
@@ -1129,7 +1132,8 @@ let stripUnderscores (s: string) : string =
 
 let get_instrLoc (inst : instr) =
   match inst with
-      Set(_, _, loc, _) -> loc
+    | Pure (_, loc, _) -> loc
+    | Set(_, _, loc, _) -> loc
     | Call(_, _, _, loc, _) -> loc
     | VarDecl(_,loc) -> loc
 let get_globalLoc (g : global) =
@@ -3584,6 +3588,11 @@ class defaultCilPrinterClass : cilPrinter = object (self)
   (*** INSTRUCTIONS ****)
   method pInstr () (i:instr) =       (* imperative instruction *)
     match i with
+    | Pure (e, l, el) ->
+      self#pLineDirective l
+        ++ self#pExp () e
+        ++ text printInstrTerminator
+
     | Set(lv,e,l,el) -> begin
         (* Be nice to some special cases *)
         match e with
@@ -5375,6 +5384,9 @@ and childrenInstr (vis: cilVisitor) (i: instr) : instr =
   let fLval lv = visitCilLval vis lv in
   match i with
   | VarDecl(v,l) -> i
+  | Pure (e, l, el) ->
+      let e' = fExp e in
+      if e' != e then Pure (e', l, el) else i
   | Set(lv,e,l,el) ->
       let lv' = fLval lv in let e' = fExp e in
       if lv' != lv || e' != e then Set(lv',e',l,el) else i
