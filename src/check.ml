@@ -835,9 +835,9 @@ and checkInstr (i: instr) =
   if !ignoreInstr i then ()
   else
   match i with
-  | Pure (e, l) ->
+  | Pure (e, l, el) ->
       currentLoc := l;
-      currentExpLoc := l;
+      currentExpLoc := el;
       ignore (checkExp false e)
 
   | Set (dest, e, l, el) ->

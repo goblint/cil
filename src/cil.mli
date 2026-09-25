@@ -1086,7 +1086,9 @@ function call, or a variable declaration. *)
 
 (** Instructions. *)
 and instr =
-  | Pure of exp * location (** Side-effect-less expression evaluation. *)
+  | Pure of exp * location * location 
+   (** Side-effect-less expression evaluation.
+       Second location is just for expression when inside condition. *)
   | Set        of lval * exp * location * location
    (** An assignment. The type of the expression is guaranteed to be the same
       with that of the lvalue.

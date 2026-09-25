@@ -842,7 +842,7 @@ module BlockChunk =
         {l with synthetic = true}
 
       let doInstr: instr -> instr = function
-        | Pure (e, loc) -> Pure (e, doLoc loc)
+        | Pure (e, loc, eloc) -> Pure (e, doLoc loc, doLoc eloc)
         | Set (l, e, loc, eloc) -> Set (l, e, doLoc loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, doLoc loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, doLoc loc, doLoc eloc)
@@ -938,7 +938,7 @@ module BlockChunk =
           c
 
       let eDoInstr: instr -> instr = function
-        | Pure (e, loc) -> Pure (e, doLoc loc)
+        | Pure (e, loc, eloc) -> Pure (e, loc, doLoc eloc)
         | Set (l, e, loc, eloc) -> Set (l, e, loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, loc, doLoc eloc)
@@ -3535,7 +3535,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
   let finishExp ?(newWhat=what)
                 (se: chunk) (e: exp) (t: typ) : chunk * exp * typ =
     match newWhat with
-    | ADrop -> (SynthetizeLoc.doChunkTail (se +++ (Pure (e, !currentLoc))), e, t) (* TODO: also add eloc if comma expression inside if condition, etc. *)
+    | ADrop -> (SynthetizeLoc.doChunkTail (se +++ (Pure (e, !currentLoc, !currentExpLoc))), e, t)
     | ADropFull | AType -> (SynthetizeLoc.doChunkTail se, e, t)
     | AExpLeaveArrayFun ->
         (SynthetizeLoc.doChunkTail se, e, t) (* It is important that we do not do "processArrayFun" in
