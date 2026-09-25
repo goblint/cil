@@ -1,0 +1,52 @@
+#include "testharness.h"
+
+/* Test that integer promotions for bit-fields correctly account for the
+   bit-field width (c.f. ISO 6.3.1.1).
+   A bit-field whose values fit in int shall be promoted to int, including
+   GCC's extended bit-field base types. */
+
+struct X {
+  long x : 7;   /* signed long 7-bit: range fits in int -> promote to int */
+} sx;
+
+struct UX {
+  unsigned int y : 7;  /* unsigned int 7-bit: range [0,127] fits in int -> promote to int */
+} usx;
+
+struct LX {
+  /* One bit wider than int: its range is too large to fit in int. */
+  long z : sizeof(int) * 8 + 1;
+} lsx;
+
+int main() {
+  /* _Generic selects based on type after integer promotion if one occurred (ISO 6.5.1.1).
+     For long : 7 bit-field, the promoted type should be int. */
+  int r1 = _Generic(sx.x + 0, int : 1, default : -1);
+  if (r1 != 1) E(1);
+
+  /* Unary + also triggers integer promotion */
+  int r2 = _Generic(+sx.x, int : 1, default : -1);
+  if (r2 != 1) E(2);
+
+  /* Unary - also triggers integer promotion */
+  int r3 = _Generic(-sx.x, int : 1, default : -1);
+  if (r3 != 1) E(3);
+
+  /* Unary ~ also triggers integer promotion */
+  int r4 = _Generic(~sx.x, int : 1, default : -1);
+  if (r4 != 1) E(4);
+
+  /* unsigned int : 7 should also promote to int (7-bit range [0,127] fits) */
+  int r5 = _Generic(usx.y + 0, int : 1, default : -1);
+  if (r5 != 1) E(5);
+
+  /* Direct bit-field access does not itself trigger integer promotion. */
+  int r6 = _Generic(sx.x, int : 1, default : -1);
+  if (r6 != -1) E(6);
+
+  /* A bit-field whose range does not fit in int is not promoted to int. */
+  int r7 = _Generic(lsx.z + 0, long : 1, default : -1);
+  if (r7 != 1) E(7);
+
+  SUCCESS;
+}
