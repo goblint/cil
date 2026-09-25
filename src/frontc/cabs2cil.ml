@@ -1328,8 +1328,9 @@ end
 
 (**** EXP actions ***)
 type expAction =
-    ADrop                               (* Drop the result. Only the
+  | ADropFull                           (* Drop the result. Only the
                                            side-effect is interesting *)
+  | ADrop                               (* Keep the result as pure expression. *)
   | AType                               (* Only the type of the result
                                            is interesting.  *)
   | ASet of lval * typ                  (* Put the result in a given lval,
@@ -3535,7 +3536,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                 (se: chunk) (e: exp) (t: typ) : chunk * exp * typ =
     match newWhat with
     | ADrop -> (SynthetizeLoc.doChunkTail (se +++ (Pure (e, !currentLoc))), e, t) (* TODO: also add eloc if comma expression inside if condition, etc. *)
-    | AType -> (SynthetizeLoc.doChunkTail se, e, t)
+    | ADropFull | AType -> (SynthetizeLoc.doChunkTail se, e, t)
     | AExpLeaveArrayFun ->
         (SynthetizeLoc.doChunkTail se, e, t) (* It is important that we do not do "processArrayFun" in
                       this case. We exploit this when we process the typeOf
@@ -3985,7 +3986,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           match what with
             AExp (Some _) -> AExp (Some typ)
           | AExp None -> what
-          | ADrop | AType | AExpLeaveArrayFun -> what
+          | ADropFull | ADrop | AType | AExpLeaveArrayFun -> what
           | ASet (lv, lvt) ->
               (* If the cast from typ to lvt would be dropped, then we
                  continue with a Set *)
@@ -4281,7 +4282,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
              in
              let (se2, e'', t'') = doExp false e2 (ASet(tmplv, lvt)) in
              let newWhat = match what with
-               | ADrop -> AExpLeaveArrayFun
+               | ADrop -> ADropFull
                | what -> what
              in
              finishExp ~newWhat (se1 @@ se2 @@ se3) (Lval tmplv) lvt
@@ -4861,7 +4862,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
           in
           match !pwhat with
           | ADrop ->
-            pwhat' := AExpLeaveArrayFun;
+            pwhat' := ADropFull;
             addCall None zero intType
           | AType -> prestype := !resType'
           | ASet(lv, vtype) when !doCollapseCallCast || (Util.equals (typeSig vtype) (typeSig !resType')) ->
