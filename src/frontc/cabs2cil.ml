@@ -846,7 +846,6 @@ module BlockChunk =
         | Set (l, e, loc, eloc) -> Set (l, e, doLoc loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, doLoc loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, doLoc loc, doLoc eloc)
-        | Asm (a, b, c, d, e, loc) -> Asm (a, b, c, d, e, doLoc loc)
 
       (** Change all stmt and instr locs to synthetic, except the first one.
           Expressions/initializers that expand to multiple instructions cannot have intermediate locations referenced. *)
@@ -884,6 +883,7 @@ module BlockChunk =
             | Block b ->
               doBlock ~first b;
               s.skind
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock ~first b =
           doStmts ~first b.bstmts
         and doStmts ~first = function
@@ -922,6 +922,7 @@ module BlockChunk =
             | Block b ->
               doBlock b;
               s.skind
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock b =
           doStmts b.bstmts
         and doStmts = function
@@ -941,7 +942,6 @@ module BlockChunk =
         | Set (l, e, loc, eloc) -> Set (l, e, loc, doLoc eloc)
         | VarDecl (v, loc) -> VarDecl (v, loc)
         | Call (l, f, a, loc, eloc) -> Call (l, f, a, loc, doLoc eloc)
-        | Asm (a, b, c, d, e, loc) -> Asm (a, b, c, d, e, loc)
 
       (** Change first stmt or instr eloc to synthetic. *)
       let eDoChunkHead (c: chunk): chunk =
@@ -966,6 +966,7 @@ module BlockChunk =
             | Block b ->
               doBlock b;
               s.skind
+            | Asm a -> Asm {a with loc = doLoc a.loc}
         and doBlock b =
           doStmts b.bstmts
         and doStmts = function
@@ -1361,24 +1362,51 @@ type condExpRes =
   | CENot of condExpRes
 
 (******** CASTS *********)
-let rec integralPromotion (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
-  match unrollType t with
-    TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
-  | TInt ((IShort|IUShort|IChar|ISChar|IUChar) as ik, a) ->
+let rec integralPromotion ?width (t : typ) : typ = (* c.f. ISO 6.3.1.1 *)
+  match width, unrollType t with
+  | _, TInt (IBool, a) -> TInt (IInt, a) (* _Bool can only be 0 or 1, irrespective of its size *)
+  | None, TInt ((IShort|IUShort|IChar|ISChar|IUChar) as ik, a) ->
+      (* Standard integer promotion: types narrower than int promote to int or unsigned int *)
       if bitsSizeOf t < bitsSizeOf (TInt (IInt, [])) || isSigned ik then
 	TInt(IInt, a)
       else
 	TInt(IUInt, a)
-  | TInt _ -> t
-  | TEnum (ei, a) -> integralPromotion (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
-  | t -> E.s (error "integralPromotion: not expecting %a" d_type t)
+  | None, TInt _ -> t (* int, unsigned int, long, etc. are unchanged by integer promotions *)
+  | Some w, TInt (ik, a) ->
+      (* Bit-field-aware integer promotion. (ISO 6.3.1.1) *)
+      let int_bits = bitsSizeOf (TInt (IInt, [])) in
+      if w < int_bits then TInt (IInt, a)
+      else if w = int_bits then
+        if isSigned ik then TInt (IInt, a) else TInt (IUInt, a)
+      else t
+  | _, TEnum (ei, a) -> integralPromotion ?width (TInt(ei.ekind, a)) (* gcc packed enums can be < int *)
+  | _, t -> E.s (error "integralPromotion: not expecting %a" d_type t)
+
+(* If the lvalue ends in a bit-field access, return the bit-field width;
+   otherwise return None. Handles nested field accesses (e.g. s.inner.bf)
+   by examining the last field in the offset chain. *)
+let bitfieldWidthOfLval ((_, off) : lval) : int option =
+  let rec lastBitfieldInOffset = function
+    | NoOffset -> None
+    | Field (fi, NoOffset) -> fi.fbitfield
+    | Field (_, sub) -> lastBitfieldInOffset sub
+    | Index (_, sub) -> lastBitfieldInOffset sub
+  in
+  lastBitfieldInOffset off
+
+(* Apply integer promotion considering a possible bit-field restriction.
+   If [e] is a bit-field lvalue, uses its width; otherwise falls back to
+   the regular integralPromotion. *)
+let integralPromotionE (e : exp) (t : typ) : typ =
+  let width = match e with Lval lv -> bitfieldWidthOfLval lv | _ -> None in
+  integralPromotion ?width t
 
 let defaultArgumentPromotion (t : typ) : typ = (* c.f. ISO 6.5.2.2:6 *)
   match unrollType t with
   | TFloat (FFloat, a) -> TFloat (FDouble, a)
   | _ -> if isIntegralType t then integralPromotion t else t
 
-let arithmeticConversion    (* c.f. ISO 6.3.1.8 *)
+let arithmeticConversion ?width1 ?width2    (* c.f. ISO 6.3.1.8 *)
     (t1: typ)
     (t2: typ) : typ =
   let resultingFType fkind1 t1 fkind2 t2 =
@@ -1410,8 +1438,8 @@ let arithmeticConversion    (* c.f. ISO 6.3.1.8 *)
   | TFloat(_, _), _ -> t1
   | _, TFloat(_, _) -> t2
   | _, _ -> begin
-      let t1' = integralPromotion t1 in
-      let t2' = integralPromotion t2 in
+      let t1' = integralPromotion ?width:width1 t1 in
+      let t2' = integralPromotion ?width:width2 t2 in
       match unrollType t1', unrollType t2' with
 
       (* If both operands have the same type, then no further
@@ -1978,7 +2006,7 @@ let makeGlobalVarinfo (isadef: bool) (vi: varinfo) : varinfo * bool =
 
     (* New-style extern inline handling: the real definition replaces the extern
        inline one *)
-    if (not !Cil.oldstyleExternInline) && oldvi.vstorage = Extern && oldvi.vinline then begin
+    if (not !Cil.oldstyleExternInline) && oldvi.vstorage = Extern && oldvi.vinline && isadef then begin
       H.remove alreadyDefined oldvi.vname;
       theFile := Util.list_map (fun g -> match g with
 	   | GFun (fi, l) when fi.svar == oldvi -> GVarDecl(fi.svar, l)
@@ -4029,7 +4057,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | A.UNARY(A.MINUS, e) ->
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
-          let tres = integralPromotion t in
+          let tres = integralPromotionE e' t in
           let e'' = UnOp(Neg, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
           finishExp se e'' tres
         else
@@ -4041,7 +4069,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | A.UNARY(A.BNOT, e) ->
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
-          let tres = integralPromotion t in
+          let tres = integralPromotionE e' t in
           let e'' = UnOp(BNot, makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres, tres) in
           finishExp se e'' tres
         else
@@ -4050,7 +4078,7 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
     | A.UNARY(A.PLUS, e) ->
         let (se, e', t) = doExp asconst e (AExp None) in
         if isIntegralType t then
-          let tres = integralPromotion t in
+          let tres = integralPromotionE e' t in
           let e'' = makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:t ~newt:tres in
           finishExp se e'' tres
         else
@@ -4772,22 +4800,41 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
                           prestype := intType
                   | _ -> ignore (warn "Invalid call to builtin_types_compatible_p");
                 end
-                else if fv.vname = "__builtin_clzll" && asconst && isEmpty (!prechunk ()) then
-                  begin
-                  (* Constant-fold the argument and see if it is a constant *)
-                    let countLeadingZeros (arg: cilint) pos = pos - Z.numbits arg
-                    in
-                    match !pargs with
-                      [ arg ] -> begin
-                        match constFold true arg with
-                          (Const CInt (arg, kind, _)) ->
-                            piscall := false;
-                            pres := integer (countLeadingZeros arg 64);
-                            prestype := intType
-                        | _ -> ()
-                      end
-                    | _ -> ignore (warn "Invalid call to __builtin_clzll");
-                  end
+              else if fv.vname = "__builtin_clzll" && asconst && isEmpty (!prechunk ()) then
+                begin
+                (* Constant-fold the argument and see if it is a constant *)
+                  let countLeadingZeros (arg: cilint) pos = pos - Z.numbits arg
+                  in
+                  match !pargs with
+                    [ arg ] -> begin
+                      match constFold true arg with
+                        (Const CInt (arg, kind, _)) ->
+                          piscall := false;
+                          pres := integer (countLeadingZeros arg 64);
+                          prestype := intType
+                      | _ -> ()
+                    end
+                  | _ -> ignore (warn "Invalid call to __builtin_clzll");
+                end
+              else if fv.vname = "__builtin_bswap16" && asconst && isEmpty (!prechunk ()) then (* to support pure switch cases in Linux kernel *)
+                begin
+                  match !pargs with
+                  | [ arg ] -> begin
+                      piscall := false;
+                      prestype := TInt (intKindForSize 2 true, []);
+                      let ipt = integralPromotion !prestype in (* arg has same type by builtins declarations *)
+                      let arg = makeCastT ~kind:IntegerPromotion ~e:arg ~oldt:!prestype ~newt:ipt in (* bitwise operators will promote uint16 to int *)
+                      let e =
+                        BinOp (BOr,
+                          BinOp (Shiftlt, arg, integer 8, ipt), (* shift has left promoted arg type *)
+                          BinOp (Shiftrt, arg, integer 8, ipt), (* shift has left promoted arg type *)
+                          ipt) (* bitwise or has arithmetic converted type (already promoted and same) *)
+                      in
+                      pres := makeCastT ~kind:Internal ~e ~oldt:ipt ~newt:!prestype (* force promoted int back to uint16 *)
+                    end
+                  | _ ->
+                    ignore (warn "Invalid call to builtin_bswap16");
+                end
             end
           | _ -> ()
         );
@@ -5073,6 +5120,10 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
         in
         let (_, _, e_typ) = doExp false e (AExp None) in (* doExp with AExp handles array and function types for "lvalue conversions" (AType would not!) *)
         let e_typ = removeOuterQualifierAttributes e_typ in (* removeOuterQualifierAttributes handles qualifiers for "lvalue conversions" *)
+        (* The generic selection itself does not perform integer promotion.
+           If the controlling expression contains an operator which requires
+           promotion, doExp has already given that expression its promoted
+           result type; a bare lvalue keeps its unpromoted type. *)
         let al_compatible = List.filter (fun ((ast, adt), _) -> typ_compatible e_typ (doOnlyType ast adt)) al_nondefault in
 
         (* TODO: error when multiple compatible associations or defaults even when unused? *)
@@ -5091,28 +5142,32 @@ and doExp (asconst: bool)   (* This expression is used as a constant *)
   with e when continueOnError -> begin
     (*ignore (E.log "error in doExp (%s)" (Printexc.to_string e));*)
     E.hadErrors := true;
-    (i2c (dInstr (dprintf "booo_exp(%t)" d_thisloc) !currentLoc),
+    (s2c (dStmt (dprintf "booo_exp(%t)" d_thisloc) !currentLoc),
      integer 0, intType)
   end
 
 (* bop is always the arithmetic version. Change it to the appropriate pointer
    version if necessary *)
 and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
+  (* Pass bit-field widths into the conversions so each operand undergoes
+     integer promotion exactly once. *)
+  let width1 = match e1 with Lval lv -> bitfieldWidthOfLval lv | _ -> None in
+  let width2 = match e2 with Lval lv -> bitfieldWidthOfLval lv | _ -> None in
   let doArithmetic () =
-    let tres = arithmeticConversion t1 t2 in
+    let tres = arithmeticConversion ?width1 ?width2 t1 t2 in
     (* Keep the operator since it is arithmetic *)
     tres,
     optConstFoldBinOp false bop (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) tres
   in
   let doArithmeticComp () =
-    let tres = arithmeticConversion t1 t2 in
+    let tres = arithmeticConversion ?width1 ?width2 t1 t2 in
     (* Keep the operator since it is arithmetic *)
     intType,
     optConstFoldBinOp false bop
       (makeCastT ~kind:ArithmeticConversion ~e:e1 ~oldt:t1 ~newt:tres) (makeCastT ~kind:ArithmeticConversion ~e:e2 ~oldt:t2 ~newt:tres) intType
   in
   let doIntegralArithmetic () =
-    let tres = unrollType (arithmeticConversion t1 t2) in
+    let tres = unrollType (arithmeticConversion ?width1 ?width2 t1 t2) in
     match tres with
       TInt _ ->
         tres,
@@ -5133,8 +5188,8 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
   | (Mod|BAnd|BOr|BXor) -> doIntegralArithmetic ()
   | (Shiftlt|Shiftrt) -> (* ISO 6.5.7. Only integral promotions. The result
                             has the same type as the left hand side *)
-      let t1' = integralPromotion t1 in
-      let t2' = integralPromotion t2 in
+      let t1' = integralPromotion ?width:width1 t1 in
+      let t2' = integralPromotion ?width:width2 t2 in
       t1',
       optConstFoldBinOp false bop (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:t1') (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:t2') t1'
 
@@ -5146,15 +5201,15 @@ and doBinOp (bop: binop) (e1: exp) (t1: typ) (e2: exp) (t2: typ) : typ * exp =
   | PlusA when isPointerType t1 && isIntegralType t2 ->
       t1,
       optConstFoldBinOp false PlusPI e1
-        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion t2)) t1
+        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion ?width:width2 t2)) t1
   | PlusA when isIntegralType t1 && isPointerType t2 ->
       t2,
       optConstFoldBinOp false PlusPI e2
-        (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:(integralPromotion t1)) t2
+        (makeCastT ~kind:IntegerPromotion ~e:e1 ~oldt:t1 ~newt:(integralPromotion ?width:width1 t1)) t2
   | MinusA when isPointerType t1 && isIntegralType t2 ->
       t1,
       optConstFoldBinOp false MinusPI e1
-        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion t2)) t1
+        (makeCastT ~kind:IntegerPromotion ~e:e2 ~oldt:t2 ~newt:(integralPromotion ?width:width2 t2)) t1
   | MinusA when isPointerType t1 && isPointerType t2 ->
       let commontype = t1 in
       !ptrdiffType,
@@ -5957,6 +6012,17 @@ and createLocal ?allow_var_decl:(allow_var_decl=true) ((_, sto, _, _) as specs)
       let vi = makeVarInfoCabs ~isformal:false
                                ~isglobal:true
                                loc specs (newname, ndt, a) in
+      (* Mark it as pulled up from a local static variable and retain its
+         originating function. *)
+      vi.vattr <- Attr("goblint_cil_pulledup", [AStr !currentFunctionFDEC.svar.vname]) :: vi.vattr;
+      (if !addNestedScopeAttr then
+        (* two scopes implies top-level scope in the function, one is created for the FUNDEF (includes formals etc),
+           one for the body which is a block *)
+        match !scopes with
+        | _::_::_::_ ->
+          (* i.e.  List.length scopes > 2 *)
+          vi.vattr <- Attr("goblint_cil_nested", []) :: vi.vattr
+        | _ -> ());
       (* However, we have a problem if a real global appears later with the
          name that we have happened to choose for this one. Remember these names
          for later. *)
@@ -6520,7 +6586,6 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
                 else if hasAttribute "noreturn" e.vattr then false
                 else true
             | Call _ -> true
-            | Asm _ -> true
             | VarDecl _ -> true
             in
             let rec stmtFallsThrough (s: stmt) : bool =
@@ -6552,6 +6617,7 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
                   (* A loop falls through if it can break. *)
                   blockCanBreak b
               | Block b -> blockFallsThrough b
+              | Asm _ -> true
             and blockFallsThrough b =
               let rec fall = function
                   [] -> true
@@ -6589,7 +6655,7 @@ and doDecl (isglobal: bool) (isstmt: bool) : A.definition -> chunk = function
             (* will we leave this statement or block with a break command? *)
             and stmtCanBreak (s: stmt) : bool =
               match s.skind with
-                Instr _ | Return _ | Continue _ | Goto _ | ComputedGoto _ -> false
+                Instr _ | Return _ | Continue _ | Goto _ | ComputedGoto _ | Asm _ -> false
               | Break _ -> true
               | If (_, b1, b2, _, _) ->
                   blockCanBreak b1 || blockCanBreak b2
@@ -6980,7 +7046,7 @@ and doStatement (s : A.statement) : chunk =
         let (se, e', et) = doExp false e (AExp None) in
         if not (Cil.isIntegralType et) then
           E.s (error "Switch on a non-integer expression.");
-        let et' = integralPromotion et in
+        let et' = integralPromotionE e' et in
         let e' = makeCastT ~kind:IntegerPromotion ~e:e' ~oldt:et ~newt:et' in
         enter_break_env ();
         let s' = doStatement s in
@@ -7093,7 +7159,7 @@ and doStatement (s : A.statement) : chunk =
         currentLoc := loc';
         currentExpLoc := loc'; (* for argument doExp below *)
         let stmts : chunk ref = ref empty in
-	let (tmpls', outs', ins', clobs') =
+	let (tmpls', outs', ins', clobs', gotos') =
 	  match details with
 	  | None ->
 	      let tmpls' =
@@ -7101,8 +7167,8 @@ and doStatement (s : A.statement) : chunk =
 		      let escape = Str.global_replace pattern "%%" in
 		      Util.list_map escape tmpls
 	      in
-	      (tmpls', [], [], [])
-	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs } ->
+	      (tmpls', [], [], [], [])
+	  | Some { aoutputs = outs; ainputs = ins; aclobbers = clobs; agotos = gotos } ->
               let outs' =
 		Util.list_map
 		  (fun (id, c, e) ->
@@ -7125,10 +7191,16 @@ and doStatement (s : A.statement) : chunk =
 		    (id, c, e'))
 		  ins
               in
-	      (tmpls, outs', ins', clobs)
+          let gotos' = List.map (fun l -> 
+              let gref = ref dummyStmt in
+              addGoto (lookupLabel l) gref;
+              gref
+            ) gotos
+            in
+	      (tmpls, outs', ins', clobs, gotos')
 	in
         !stmts @@
-        (i2c (Asm(attr', tmpls', outs', ins', clobs', loc')))
+        s2c (mkStmt (Asm {attr = attr'; template = tmpls'; outputs = outs'; inputs = ins'; clobbers = clobs'; gotos = gotos'; loc = loc'}))
 
   with e when continueOnError -> begin
     (ignore (E.log "Error in doStatement (%s)\n" (Printexc.to_string e)));

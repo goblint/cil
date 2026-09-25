@@ -14,7 +14,11 @@ let push_context: (unit -> unit) ref =
   ref (fun _ -> E.s (E.bug "You called an uninitialized push_context")) 
 
 let pop_context: (unit -> unit) ref = 
-  ref (fun _ -> E.s (E.bug "You called an uninitialized pop_context")) 
+  ref (fun _ -> E.s (E.bug "You called an uninitialized pop_context"))
+
+(* Set to true while parsing a typedef declaration's declarator list, so that
+   declarator_no_init calls add_type (not add_identifier) for typedef names. *)
+let is_typedef_decl : bool ref = ref false
 
 
 (* Keep here the current pattern for formatparse *)

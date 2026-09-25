@@ -115,18 +115,14 @@ let applyPointer (ptspecs: attribute list list) (dt: decl_type)
   loop ptspecs
 
 let doDeclaration (loc: cabsloc) (specs: spec_elem list) (nl: init_name list) : definition =
-  if isTypedef specs then begin
-    (* Tell the lexer about the new type names *)
-    List.iter (fun ((n, _, _, _), _) -> !Lexerhack.add_type n) nl;
+  Lexerhack.is_typedef_decl := false;
+  if isTypedef specs then
     TYPEDEF ((specs, List.map (fun (n, _) -> n) nl), loc)
-  end else
+  else
     if nl = [] then
       ONLYTYPEDEF (specs, loc)
-    else begin
-      (* Tell the lexer about the new variable names *)
-      List.iter (fun ((n, _, _, _), _) -> !Lexerhack.add_identifier n) nl;
+    else
       DECDEF ((specs, nl), loc)
-    end
 
 
 let doFunctionDef (loc: cabsloc)
@@ -243,6 +239,18 @@ let transformOffsetOf (speclist, dtype) member =
           Buffer.add_char buffer char))
       queue;
     Buffer.contents buffer
+
+  (* this makes sure that the labels are only allowed when goto annotation was provided *)
+  let checkAsm attrs details =
+    match details, List.assoc_opt "goto" attrs with
+    | None, Some _
+    | Some {agotos = []; _}, Some _ ->
+      parse_error "expected non-empty labels list in asm goto";
+      raise Parsing.Parse_error
+    | Some {agotos = _ :: _; _}, None ->
+      parse_error "labels provided in inline asm without goto attribute";
+      raise Parsing.Parse_error
+    | _, _ -> ()
 
 %}
 
@@ -388,7 +396,7 @@ let transformOffsetOf (speclist, dtype) member =
 
 %type <Cabs.init_name> init_declarator
 %type <Cabs.init_name list> init_declarator_list
-%type <Cabs.name> declarator
+%type <Cabs.name> declarator init_declarator_hack
 %type <Cabs.name * expression option> field_decl
 %type <(Cabs.name * expression option) list> field_decl_list
 %type <string * Cabs.decl_type> direct_decl
@@ -984,7 +992,7 @@ statement_no_null:
 |   GOTO STAR comma_expression SEMICOLON
                                  { COMPGOTO (smooth_expression (fst $3), joinLoc $1 $4) }
 |   ASM asmattr LPAREN asmtemplate asmoutputs RPAREN SEMICOLON
-                        { ASM ($2, $4, $5, joinLoc $1 $7) }
+                        { checkAsm $2 $5; ASM ($2, $4, $5, joinLoc $1 $7) }
 |   error location   SEMICOLON   { (NOP $2)}
 ;
 
@@ -1036,14 +1044,23 @@ init_declarator_attr:
 
 ;
 init_declarator:                             /* ISO 6.7 */
-    declarator                          { ($1, NO_INIT) }
-|   declarator EQ init_expression location
+    init_declarator_hack                { ($1, NO_INIT) }
+|   init_declarator_hack EQ init_expression location
                                         { let (n, d, a, l) = $1 in ((n, d, a, joinLoc l $4), $3) }
+;
+
+/* Parses "declarator" and immediately registers the declared name in the lexer hack,
+   per C11 6.2.1.7 (scope begins just after the completion of its declarator). */
+init_declarator_hack:
+    declarator                          { let (n, _, _, _) = $1 in
+                                          if !Lexerhack.is_typedef_decl then !Lexerhack.add_type n
+                                          else !Lexerhack.add_identifier n;
+                                          $1 }
 ;
 
 decl_spec_list_common:                  /* ISO 6.7 */
                                         /* ISO 6.7.1 */
-|   TYPEDEF decl_spec_list_opt          { SpecTypedef :: $2, $1  }
+|   TYPEDEF decl_spec_list_opt          { Lexerhack.is_typedef_decl := true; SpecTypedef :: $2, $1  }
 |   EXTERN decl_spec_list_opt           { SpecStorage EXTERN :: $2, $1 }
 |   STATIC  decl_spec_list_opt          { SpecStorage STATIC :: $2, $1 }
 |   AUTO   decl_spec_list_opt           { SpecStorage AUTO :: $2, $1 }
@@ -1649,6 +1666,7 @@ paren_attr_list:
 /*** GCC ASM instructions ***/
 asmattr:
      /* empty */                        { [] }
+|    GOTO  asmattr                   { ("goto", []) :: $2 }
 |    VOLATILE  asmattr                  { ("volatile", []) :: $2 }
 |    CONST asmattr                      { ("const", []) :: $2 }
 |    INLINE asmattr                     { ("inline", []) :: $2 }
@@ -1660,8 +1678,8 @@ asmtemplate:
 asmoutputs:
   /* empty */           { None }
 | COLON asmoperands asminputs
-                        { let (ins, clobs) = $3 in
-                          Some {aoutputs = $2; ainputs = ins; aclobbers = clobs} }
+                        { let (ins, clobs, gotos) = $3 in
+                          Some {aoutputs = $2; ainputs = ins; aclobbers = clobs; agotos = gotos;} }
 ;
 asmoperands:
      /* empty */                        { [] }
@@ -1678,9 +1696,10 @@ asmoperand:
 ;
 
 asminputs:
-  /* empty */                { ([], []) }
+  /* empty */                { ([], [], []) }
 | COLON asmoperands asmclobber
-                        { ($2, $3) }
+                        { let (clobs, gotos) = $3 in
+                          ($2, clobs, gotos) }
 ;
 asmopname:
     /* empty */                         { None }
@@ -1688,8 +1707,8 @@ asmopname:
 ;
 
 asmclobber:
-    /* empty */                         { [] }
-| COLON asmclobberlst                   { $2 }
+    /* empty */                         { ([], []) }
+| COLON asmclobberlst asmgoto                   { ($2, $3) }
 ;
 asmclobberlst:
     /* empty */                         { [] }
@@ -1698,6 +1717,24 @@ asmclobberlst:
 asmclobberlst_ne:
    one_string_constant                           { [$1] }
 |  one_string_constant COMMA asmclobberlst_ne    { $1 :: $3 }
+;
+
+asmgoto:
+  /* empty */ { [] }
+| COLON asmgotolst { $2 }
+;
+
+asmgotolst:
+  /* empty */ { [] }
+| asmgotolst_ne { $1 }
+;
+
+asmgotolst_ne:
+  asmgotolabel { [$1] }
+| asmgotolabel COMMA asmgotolst_ne { $1 :: $3 }
+;
+
+asmgotolabel: IDENT { fst $1 }
 ;
 
 %%
