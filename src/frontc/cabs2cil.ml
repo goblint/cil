@@ -2805,10 +2805,15 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
         enum.eitems <- Util.list_map (fun (_, x) -> x) fields;
         (* Pick the enum's kind - see discussion above *)
         let unsigned = compare_cilint !smallest zero_cilint >= 0 in
-        let smallKind = intKindForValue !smallest unsigned in
-        let largeKind = intKindForValue !largest unsigned in
+        let smallKind, largeKind =
+          match intKindForValue !smallest unsigned, intKindForValue !largest unsigned with
+          | Some smallKind, Some largeKind ->
+            smallKind, largeKind
+          | _ ->
+            E.s (E.unimp "Cannot represent the range [%s, %s] of enum %s with any supported integer type\n" (string_of_cilint !smallest) (string_of_cilint !largest) n'')
+        in
         let ekind =
-          if (bytesSizeOfInt smallKind) > (bytesSizeOfInt largeKind) then
+          if bytesSizeOfInt smallKind > bytesSizeOfInt largeKind then
             smallKind
           else
             largeKind
