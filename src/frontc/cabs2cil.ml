@@ -2754,7 +2754,8 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
           Note that these rules make the enum unsigned if possible (as
           opposed the enum constants which tend towards being signed...) *)
 
-        let updateEnum (i:cilint) : ikind =
+        let updateEnum (i : cilint) : ikind =
+          (* TODO: a bit duplicated behaviour between this and cil.intKindForValue *)
           if compare_cilint i !smallest < 0 then
             smallest := i;
           if compare_cilint i !largest > 0 then
@@ -2765,7 +2766,10 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
           else if fitsInInt ILong i then ILong
           else if fitsInInt IULong i then IULong
           else if fitsInInt ILongLong i then ILongLong
-          else IULongLong (* assume there can be not enum constants that don't fit in long long since there can only be 128bit constants if long long is also 128bit *)
+          else if fitsInInt IULongLong i then IULongLong
+          else if fitsInInt IInt128 i then IInt128
+          else if fitsInInt IUInt128 i then IUInt128
+          else E.s (E.unimp "Cannot represent enum constant %s with any supported integer type\n" (string_of_cilint i))
         in
         (* as each name,value pair is determined, this is called *)
         let rec processName kname attrs (i: exp) loc rest = begin
