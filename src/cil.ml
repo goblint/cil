@@ -2197,15 +2197,17 @@ let intKindForValue (i: cilint) (unsigned: bool) =
     else if fitsInInt IUShort i then IUShort
     else if fitsInInt IUInt i then IUInt
     else if fitsInInt IULong i then IULong
+    else if fitsInInt IULongLong i then IULongLong
     else if fitsInInt IUInt128 i then IUInt128
-    else IULongLong (* warn, IUInt128? *)
+    else IUInt128 (* warn, IUInt128? *)
   else
     if fitsInInt ISChar i then ISChar
     else if fitsInInt IShort i then IShort
     else if fitsInInt IInt i then IInt
     else if fitsInInt ILong i then ILong
+    else if fitsInInt ILongLong i then ILongLong
     else if fitsInInt IInt128 i then IInt128
-    else ILongLong (* warn, IInt128? *)
+    else IInt128 (* warn, IInt128? *)
 
 (** If the given expression is an integer constant or a CastE'd
     integer constant, return that constant's value as an ikind, int64 pair.
