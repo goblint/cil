@@ -2598,11 +2598,9 @@ val truncateCilint: ikind -> cilint -> cilint * truncation
 val fitsInInt: ikind -> cilint -> bool
 
 (** Return the smallest kind that will hold the integer's value.  The
-   kind will be unsigned if the 2nd argument is true, signed
-   otherwise.  Note that if the value doesn't fit in any of the
-   available types, you will get ILongLong (2nd argument false) or
-   IULongLong (2nd argument true). *)
-val intKindForValue: cilint -> bool -> ikind
+    kind will be unsigned if the 2nd argument is true, signed
+    otherwise. *)
+val intKindForValue: cilint -> bool -> ikind option
 
 (** Construct a cilint from an integer kind and int64 value. Used for
    getting the actual constant value from a CInt(n, ik, _)
