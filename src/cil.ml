@@ -2187,9 +2187,7 @@ let fitsInInt (k: ikind) (i: cilint) : bool =
 
 (* Return the smallest kind that will hold the integer's value.  The
    kind will be unsigned if the 2nd argument is true, signed
-   otherwise.  Note that if the value doesn't fit in any of the
-   available types, you will get ILongLong (2nd argument false) or
-   IULongLong (2nd argument true). *)
+   otherwise. *)
 let intKindForValue (i: cilint) (unsigned: bool) =
   if unsigned then
     if fitsInInt IBool i then Some IBool
