@@ -269,7 +269,8 @@ let rec analyze_init (i : init ) : A.tau =
 
 let analyze_instr (i : instr ) : unit =
   match i with
-      Set (lval, rhs, l, el) ->
+    | Pure _ -> ()
+    | Set (lval, rhs, l, el) ->
         A.assign (analyze_lval lval) (analyze_expr rhs)
     | Call (res, fexpr, actuals, l, el) ->
         if not (isFunctionType (typeOf fexpr)) then
