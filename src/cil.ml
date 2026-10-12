@@ -6741,20 +6741,20 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
             in
             let cl = synthesizeLoc cl in
             let cel = synthesizeLoc cel in
-            let make_if_stmt pred cl cel =
+            let make_if_stmt pred =
               let then_block = mkBlock [ mkStmt (Goto(ref stmt, cl)) ] in
               let else_block = mkBlock [] in
               mkStmt(If(pred,then_block,else_block,cl,cel)) in
-            let make_double_if_stmt (pred1, pred2) cl cel =
-              let then_block = mkBlock [ make_if_stmt pred2 cl cel] in
+            let make_double_if_stmt (pred1, pred2) =
+              let then_block = mkBlock [ make_if_stmt pred2 ] in
               let else_block = mkBlock [] in
               mkStmt(If(pred1,then_block,else_block,cl,cel)) in
             if !useLogicalOperators then
-              [make_if_stmt (make_or_from_cases ()) cl cel]
+              [make_if_stmt (make_or_from_cases ())]
             else
               List.map (function
-                | Case _ as lab -> make_if_stmt (make_comp lab) cl cel
-                | CaseRange (e1, e2, _, _) -> make_double_if_stmt (comp_case_range e1 e2) cl cel
+                | Case _ as lab -> make_if_stmt (make_comp lab)
+                | CaseRange (e1, e2, _, _) -> make_double_if_stmt (comp_case_range e1 e2)
                 | _ -> E.s (bug "Unexpected pattern-matching failure"))
                 cases
           | Default _ :: _ | Label _ :: _ ->
