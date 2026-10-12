@@ -6739,16 +6739,18 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
                   (fun pred label -> BinOp(LOr, pred, make_comp label, intType))
                   (make_comp lab) lab_tl
             in
+            let cl = synthesizeLoc cl in
+            let cel = synthesizeLoc cel in
             let make_if_stmt pred cl cel =
-              let then_block = mkBlock [ mkStmt (Goto(ref stmt, synthesizeLoc cl)) ] in
+              let then_block = mkBlock [ mkStmt (Goto(ref stmt, cl)) ] in
               let else_block = mkBlock [] in
-              mkStmt(If(pred,then_block,else_block,synthesizeLoc cl,synthesizeLoc cel)) in
+              mkStmt(If(pred,then_block,else_block,cl,cel)) in
             let make_double_if_stmt (pred1, pred2) cl cel =
-              let then_block = mkBlock [ make_if_stmt pred2 (synthesizeLoc cl) (synthesizeLoc cel)] in
+              let then_block = mkBlock [ make_if_stmt pred2 cl cel] in
               let else_block = mkBlock [] in
-              mkStmt(If(pred1,then_block,else_block,synthesizeLoc cl,synthesizeLoc cel)) in
+              mkStmt(If(pred1,then_block,else_block,cl,cel)) in
             if !useLogicalOperators then
-              [make_if_stmt (make_or_from_cases ()) (synthesizeLoc cl) (synthesizeLoc cel)]
+              [make_if_stmt (make_or_from_cases ()) cl cel]
             else
               List.map (function
                 | Case _ as lab -> make_if_stmt (make_comp lab) cl cel
