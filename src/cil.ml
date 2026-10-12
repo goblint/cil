@@ -6633,6 +6633,9 @@ let labelAlphaTable : (string, unit A.alphaTableData ref) H.t =
 let freshLabel (base:string) =
   fst (A.newAlphaName ~alphaTable:labelAlphaTable ~undolist:None  ~lookupname:base ~data:())
 
+let synthesizeLoc l =
+  {l with synthetic = true}
+
 let rec xform_switch_stmt s break_dest cont_dest = begin
   let suffix e = match getInteger e with
   | Some value ->
@@ -6646,11 +6649,11 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
     Label _ -> lab
   | Case(e,l,el) ->
       let str = Printf.sprintf "case_%s" (suffix e) in
-      Label(freshLabel str,l,false)
+      Label(freshLabel str,synthesizeLoc l,false)
   | CaseRange(e1,e2,l,el) ->
       let str = Printf.sprintf "caserange_%s_%s" (suffix e1) (suffix e2) in
-      Label(freshLabel str,l,false)
-  | Default(l,el) -> Label(freshLabel "switch_default",l,false)
+      Label(freshLabel str,synthesizeLoc l,false)
+  | Default(l,el) -> Label(freshLabel "switch_default",synthesizeLoc l,false)
   ) s.labels ;
   match s.skind with
   | Instr _ | Return _ | Goto _ | ComputedGoto _ | Asm _ -> ()
@@ -6697,10 +6700,10 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
        *)
 
       let break_stmt = mkStmt (Instr []) in
-      break_stmt.labels <- [Label(freshLabel "switch_break",l,false)] ;
+      break_stmt.labels <- [Label(freshLabel "switch_break",synthesizeLoc l,false)] ;
 
       (* To be changed into goto default if there if a [Default] *)
-      let goto_break = mkStmt (Goto (ref break_stmt, l)) in
+      let goto_break = mkStmt (Goto (ref break_stmt, synthesizeLoc l)) in
 
       (* Return a list of [If] statements, equivalent to the cases of [stmt].
          Use a single [If] and || operators if useLogicalOperators is true.
@@ -6713,7 +6716,7 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
           match List.find (function Default _ -> true | _ -> false) cases with
           | Default (dl, del) ->
               (* We found a [Default], update the fallthrough goto *)
-              goto_break.skind <- Goto(ref stmt, dl);
+              goto_break.skind <- Goto(ref stmt, synthesizeLoc dl);
               []
           | _ -> E.s (bug "Unexpected pattern-matching failure")
         with
@@ -6737,15 +6740,15 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
                   (make_comp lab) lab_tl
             in
             let make_if_stmt pred cl cel =
-              let then_block = mkBlock [ mkStmt (Goto(ref stmt,cl)) ] in
+              let then_block = mkBlock [ mkStmt (Goto(ref stmt, synthesizeLoc cl)) ] in
               let else_block = mkBlock [] in
-              mkStmt(If(pred,then_block,else_block,cl,cel)) in
+              mkStmt(If(pred,then_block,else_block,synthesizeLoc cl,synthesizeLoc cel)) in
             let make_double_if_stmt (pred1, pred2) cl cel =
-              let then_block = mkBlock [ make_if_stmt pred2 cl cel ] in
+              let then_block = mkBlock [ make_if_stmt pred2 (synthesizeLoc cl) (synthesizeLoc cel)] in
               let else_block = mkBlock [] in
-              mkStmt(If(pred1,then_block,else_block,cl,cel)) in
+              mkStmt(If(pred1,then_block,else_block,synthesizeLoc cl,synthesizeLoc cel)) in
             if !useLogicalOperators then
-              [make_if_stmt (make_or_from_cases ()) cl cel]
+              [make_if_stmt (make_or_from_cases ()) (synthesizeLoc cl) (synthesizeLoc cel)]
             else
               List.map (function
                 | Case _ as lab -> make_if_stmt (make_comp lab) cl cel
@@ -6765,9 +6768,9 @@ let rec xform_switch_stmt s break_dest cont_dest = begin
       xform_switch_block b (fun () -> ref break_stmt) cont_dest
   | Loop(b,l,el,_,_) ->
           let break_stmt = mkStmt (Instr []) in
-          break_stmt.labels <- [Label(freshLabel "while_break",l,false)] ;
+          break_stmt.labels <- [Label(freshLabel "while_break",synthesizeLoc l,false)] ;
           let cont_stmt = mkStmt (Instr []) in
-          cont_stmt.labels <- [Label(freshLabel "while_continue",l,false)] ;
+          cont_stmt.labels <- [Label(freshLabel "while_continue",synthesizeLoc l,false)] ;
           b.bstmts <- cont_stmt :: b.bstmts ;
           let this_stmt = mkStmt
             (Loop(b,l,el,Some(cont_stmt),Some(break_stmt))) in
