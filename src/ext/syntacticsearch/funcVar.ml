@@ -128,6 +128,9 @@ let rec search_expression_list list name loc varid includeCallTmp =
 (* Finds a variable in a list of instructions *)
 let rec search_instr_list_for_var list name varid includeCallTmp =
   match list with
+  | Pure (exp, loc, eloc) :: xs ->
+      search_expression exp name loc varid includeCallTmp
+      @ search_instr_list_for_var xs name varid includeCallTmp
   | Set ((lhost, offset), exp, loc, eloc) :: xs ->
       search_lhost lhost name loc varid includeCallTmp
       @ search_offset offset name loc varid includeCallTmp

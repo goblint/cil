@@ -205,11 +205,16 @@ let eh_kill_addrof_or_global eh =
 let eh_handle_inst i eh =
   if (!ignore_inst) i then eh else
   match i with
+  | Pure _ -> 
+    eh_kill_mem eh;
+    eh_kill_addrof_or_global eh;
+    eh
+
     (* if a pointer write, kill things with read in them.
        also kill mappings from vars that have had their address taken,
        and globals.
        otherwise kill things with lv in them and add e *)
-    Set(lv,e,_,_) -> (match lv with
+  | Set(lv,e,_,_) -> (match lv with
       (Mem _, _) ->
 	(eh_kill_mem eh;
 	 eh_kill_addrof_or_global eh;
