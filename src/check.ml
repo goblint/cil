@@ -408,6 +408,10 @@ and checkTypeInfo (isadef: defuse) ti =
     | _, _ ->
         ignore (warnContext "Bug in checkTypeInfo for %s" ti.tname))
   with Not_found -> begin (* This is the first time we see it *)
+    (match isadef with
+     | Defined -> ()
+     | Used -> ignore (warnContext "Type %s used before its definition" ti.tname)
+     | Forward -> ignore (warnContext "Unexpected forward declaration of typedef %s" ti.tname));
     if ti.tname = "" then
       ignore (warnContext "typeinfo with empty name");
     checkType ti.ttype CTDecl;
@@ -1096,9 +1100,10 @@ let checkFile flags fl =
   !valid
 
 
-let checkStandaloneExp ~(vars: varinfo list) (exp: exp) =
+let checkStandaloneExp ~(types: typeinfo list) ~(vars: varinfo list) (exp: exp) =
   if !E.verboseFlag then ignore (E.log "Checking exp %a\n" d_exp exp);
   valid := true;
+  List.iter (checkTypeInfo Defined) types;
   List.iter defineVariable vars;
 
   (try ignore (checkExp false exp) with _ -> ());
