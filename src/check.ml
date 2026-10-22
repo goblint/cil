@@ -1096,9 +1096,10 @@ let checkFile flags fl =
   !valid
 
 
-let checkStandaloneExp ~(vars: varinfo list) (exp: exp) =
+let checkStandaloneExp ~(types: typeinfo list) ~(vars: varinfo list) (exp: exp) =
   if !E.verboseFlag then ignore (E.log "Checking exp %a\n" d_exp exp);
   valid := true;
+  List.iter (checkTypeInfo Defined) types;
   List.iter defineVariable vars;
 
   (try ignore (checkExp false exp) with _ -> ());
