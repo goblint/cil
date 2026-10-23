@@ -8,6 +8,11 @@
  (modules type_sig_attrs)
  (libraries goblint-cil))
 
+(test
+ (name alpha_names)
+ (modules alpha_names)
+ (libraries goblint-cil))
+
 (rule
  (alias runtest)
  (deps (alias_rec ../cilly) (package goblint-cil) (source_tree .))

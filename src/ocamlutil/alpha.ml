@@ -1,5 +1,6 @@
 module H = Hashtbl
 module E = Errormsg
+module SuffixMap = Map.Make (String)
 open Pretty
 
 let debugAlpha (prefix: string) = false
@@ -7,10 +8,10 @@ let debugAlpha (prefix: string) = false
 let alphaSeparator = "___"
 let alphaSeparatorLen = String.length alphaSeparator
 
-(** For each prefix we remember the next integer suffix to use and the list 
-   of suffixes, each with some data assciated with the newAlphaName that 
-   created the suffix. *)
-type 'a alphaTableData = int * (string * 'a) list
+(** For each prefix we remember the largest numeric suffix used and a map
+   from suffixes to the data associated with their creation. The map is
+   persistent so that saved table values remain valid for scope rollback. *)
+type 'a alphaTableData = int * 'a SuffixMap.t
 
 type 'a undoAlphaElement = 
     AlphaChangedSuffix of 'a alphaTableData ref * 'a alphaTableData (* The 
@@ -69,7 +70,7 @@ and alphaWorker      ~(alphaTable: (string, 'a alphaTableData ref) H.t)
       if debugAlpha prefix then
         ignore (E.log " Old max %d. Old suffixes: @[%a@]" max
                   (docList 
-                     (fun (s, l) -> dprintf "%s" (* d_loc l *) s)) suffixes);
+                     (fun (s, l) -> dprintf "%s" (* d_loc l *) s)) (SuffixMap.bindings suffixes));
       (* Save the undo info *)
       (match undolist with 
         Some l -> l := AlphaChangedSuffix (rc, !rc) :: !l
@@ -79,12 +80,12 @@ and alphaWorker      ~(alphaTable: (string, 'a alphaTableData ref) H.t)
         if numsuffix > max then begin 
           (* Clearly we have not seen it *)
           numsuffix, suffix, data,
-          (suffix, data) :: suffixes 
+          SuffixMap.add suffix data suffixes
         end else begin 
-          match List.filter (fun (n, _) -> n = suffix) suffixes with 
-            [] -> (* Not found *)
-              max, suffix, data, (suffix, data) :: suffixes
-          | [(_, l) ] -> 
+          match SuffixMap.find_opt suffix suffixes with
+            None -> (* Not found *)
+              max, suffix, data, SuffixMap.add suffix data suffixes
+          | Some l ->
               (* We have seen this exact suffix before *)
               if make_new then begin
                 if max >= maxSuffix then
@@ -92,10 +93,9 @@ and alphaWorker      ~(alphaTable: (string, 'a alphaTableData ref) H.t)
                     ^^"and many digits.  This could cause overflow "
                     ^^"in the Alpha renaming module."));
                 let newsuffix = alphaSeparator ^ (string_of_int (max + 1)) in
-                max + 1, newsuffix, l, (newsuffix, data) :: suffixes
+                max + 1, newsuffix, l, SuffixMap.add newsuffix data suffixes
               end else
                 max, suffix, data, suffixes
-          |  _ -> E.s (E.bug "Alpha.alphaWorker")
         end
       in
       rc := (newmax, newsuffixes);
@@ -104,7 +104,7 @@ and alphaWorker      ~(alphaTable: (string, 'a alphaTableData ref) H.t)
       (match undolist with 
         Some l -> l := AlphaAddedSuffix prefix :: !l
       | _ -> ());
-      H.add alphaTable prefix (ref (numsuffix, [ (suffix, data) ]));
+      H.add alphaTable prefix (ref (numsuffix, SuffixMap.singleton suffix data));
       if debugAlpha prefix then ignore (E.log " First seen. ");
       lookupname, data  (* Return the original name *)
     end
@@ -168,7 +168,6 @@ let undoAlphaChanges ~(alphaTable: (string, 'a alphaTableData ref) H.t)
     undolist
 
 let docAlphaTable () (alphaTable: (string, 'a alphaTableData ref) H.t) = 
-  let acc : (string * (int * (string * 'a) list)) list ref = ref [] in
+  let acc : (string * 'a alphaTableData) list ref = ref [] in
   H.iter (fun k d -> acc := (k, !d) :: !acc) alphaTable;
   docList ~sep:line (fun (k, (d, _)) -> dprintf "  %s -> %d" k d) () !acc
-
