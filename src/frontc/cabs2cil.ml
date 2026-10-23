@@ -6875,12 +6875,21 @@ and doBody (blk: A.block) : chunk =
   let battrs = doAttributes blk.A.battrs in
 
   let bodychunk =
+    (* Convert in source order, but do not repeatedly copy and compact the
+       growing block prefix. Keep the statement objects (and hence label and
+       goto targets) and compact the assembled block just once. *)
+    let stmts, cases =
+      List.fold_left
+        (fun (stmts, cases) s ->
+          let c = doStatement s in
+          List.rev_append (pushPostIns c) stmts,
+          List.rev_append c.cases cases)
+        ([], []) blk.A.bstmts
+    in
     afterConversion
-      (List.fold_left   (* !!! @ evaluates its arguments backwards *)
-         (fun prev s -> let res = doStatement s in
-                        prev @@ res)
-         empty
-         blk.A.bstmts)
+      { stmts = compactStmts (List.rev stmts);
+        postins = [];
+        cases = List.rev cases }
   in
   exitScope ();
 
