@@ -6010,8 +6010,12 @@ let typeSigAddAttrs a0 t =
     so that signed and unsigned will compare the same. *)
 let rec typeSigWithAttrs ?(ignoreSign=false) doattr t =
   let typeSig = typeSigWithAttrs ~ignoreSign doattr in
-  let attrVisitor = new typeSigVisitor typeSig in
-  let doattr al = visitCilAttributes attrVisitor (doattr al) in
+  let doattr al =
+    (* Transform first: the callback may add attributes to an empty list. *)
+    match doattr al with
+    | [] -> []
+    | al -> visitCilAttributes (new typeSigVisitor typeSig) al
+  in
   match t with
   | TInt (ik, al) ->
       let ik' =
