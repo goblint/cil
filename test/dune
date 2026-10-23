@@ -1,3 +1,8 @@
+(test
+ (name lexer_tracking)
+ (modules lexer_tracking)
+ (libraries goblint-cil))
+
 (rule
  (alias runtest)
  (deps (alias_rec ../cilly) (package goblint-cil) (source_tree .))

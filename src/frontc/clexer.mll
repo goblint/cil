@@ -58,19 +58,19 @@ let addComment c =
   GrowArray.setg Cabshelper.commentsGA (i+1) (l,c,false)
 
 (* track whitespace for the current token *)
-let white = ref ""
-let addWhite lexbuf = if not !Whitetrack.enabled then
-    let w = Lexing.lexeme lexbuf in
-    white := !white ^ w
-let clear_white () = white := ""
-let get_white () = !white
+let white = Buffer.create 64
+let addWhite lexbuf =
+    if !Whitetrack.enabled then
+      Buffer.add_string white (Lexing.lexeme lexbuf)
+let clear_white () = Buffer.clear white
+let get_white () = Buffer.contents white
 
-let lexeme = ref ""
+let lexeme = Buffer.create 64
 let addLexeme lexbuf =
-    let l = Lexing.lexeme lexbuf in
-    lexeme := !lexeme ^ l
-let clear_lexeme () = lexeme := ""
-let get_extra_lexeme () = !lexeme
+    if !Whitetrack.enabled then
+      Buffer.add_string lexeme (Lexing.lexeme lexbuf)
+let clear_lexeme () = Buffer.clear lexeme
+let get_extra_lexeme () = Buffer.contents lexeme
 
 let int64_to_char value =
   if (compare value (Int64.of_int 255) > 0) || (compare value Int64.zero < 0) then
@@ -273,6 +273,8 @@ let scan_ident id =
 
 
 let init ~(filename: string) : Lexing.lexbuf =
+  clear_white ();
+  clear_lexeme ();
   init_lexicon ();
   (* Inititialize the pointer in Errormsg *)
   Lexerhack.add_type := add_type;
@@ -285,6 +287,8 @@ let init ~(filename: string) : Lexing.lexbuf =
   E.startParsing filename
 
 let initFromString (s: string) : Lexing.lexbuf =
+  clear_white ();
+  clear_lexeme ();
   init_lexicon ();
   (* Inititialize the pointer in Errormsg *)
   Lexerhack.add_type := add_type;
@@ -479,16 +483,16 @@ let no_parse_pragma =
 
 
 rule initial =
-	parse 	"/*"			{ let il = comment lexbuf in
+	parse 	"/*"			{ addWhite lexbuf;
+                                          let il = comment lexbuf in
 	                                  let sl = intlist_to_string il in
 					  addComment sl;
-                                          addWhite lexbuf;
                                           initial lexbuf}
-|               "//"                    { let il = onelinecomment lexbuf in
+|               "//"                    { addWhite lexbuf;
+                                          let il = onelinecomment lexbuf in
                                           let sl = intlist_to_string il in
                                           addComment sl;
                                           E.newline();
-                                          addWhite lexbuf;
                                           initial lexbuf
                                            }
 |		blank			{ addWhite lexbuf; initial lexbuf}
