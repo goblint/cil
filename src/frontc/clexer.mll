@@ -82,12 +82,10 @@ let int64_to_char value =
     Char.chr (Int64.to_int value)
 
 (* takes a not-nul-terminated list, and converts it to a string. *)
-let rec intlist_to_string (str: int64 list):string =
-  match str with
-    [] -> ""  (* add nul-termination *)
-  | value::rest ->
-      let this_char = int64_to_char value in
-      (String.make 1 this_char) ^ (intlist_to_string rest)
+let intlist_to_string (str: int64 list):string =
+  let buffer = Buffer.create 64 in
+  List.iter (fun value -> Buffer.add_char buffer (int64_to_char value)) str;
+  Buffer.contents buffer
 
 (* Some debugging support for line numbers *)
 let dbgToken (t: token) =
@@ -670,8 +668,10 @@ and hash = parse
                 (* For pragmas with irregular syntax, like #pragma warning,
                    we parse them as a whole line. *)
 | "pragma" blank (no_parse_pragma as pragmaName)
-                { let here = currentLoc () in
-                  PRAGMA_LINE (pragmaName ^ pragma lexbuf, here)
+                 { let here = currentLoc () in
+                   let buffer = Buffer.create 64 in
+                   Buffer.add_string buffer pragmaName;
+                   PRAGMA_LINE (pragma buffer lexbuf, here)
                 }
 | "pragma"      { pragmaLine := true; PRAGMA (currentLoc ()) }
 | _	        { addWhite lexbuf; endline lexbuf}
@@ -691,10 +691,10 @@ and endline = parse
 |   eof                         { EOF }
 |	_			{ addWhite lexbuf; endline lexbuf}
 
-and pragma = parse
-   '\n'                 { E.newline (); "" }
-|   _                   { let cur = Lexing.lexeme lexbuf in
-                          cur ^ (pragma lexbuf) }
+and pragma buffer = parse
+   '\n'                 { E.newline (); Buffer.contents buffer }
+|   _                   { Buffer.add_char buffer (Lexing.lexeme_char lexbuf 0);
+                          pragma buffer lexbuf }
 
 and str = parse
         '"'             {[]} (* no nul terminiation in CST_STRING '"' *)

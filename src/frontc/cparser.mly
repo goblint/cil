@@ -176,12 +176,10 @@ let int64_to_char value =
     Char.chr (Int64.to_int value)
 
 (* takes a not-nul-terminated list, and converts it to a string. *)
-let rec intlist_to_string (str: int64 list):string =
-  match str with
-    [] -> ""  (* add nul-termination *)
-  | value::rest ->
-      let this_char = int64_to_char value in
-      (String.make 1 this_char) ^ (intlist_to_string rest)
+let intlist_to_string (str: int64 list):string =
+  let buffer = Buffer.create 64 in
+  List.iter (fun value -> Buffer.add_char buffer (int64_to_char value)) str;
+  Buffer.contents buffer
 
 let fst3 (result, _, _) = result
 let snd3 (_, result, _) = result
