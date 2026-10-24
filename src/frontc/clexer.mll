@@ -81,12 +81,6 @@ let int64_to_char value =
   else
     Char.chr (Int64.to_int value)
 
-(* takes a not-nul-terminated list, and converts it to a string. *)
-let intlist_to_string (str: int64 list):string =
-  let buffer = Buffer.create 64 in
-  List.iter (fun value -> Buffer.add_char buffer (int64_to_char value)) str;
-  Buffer.contents buffer
-
 (* Some debugging support for line numbers *)
 let dbgToken (t: token) =
   if false then begin
@@ -485,12 +479,12 @@ let no_parse_pragma =
 rule initial =
 	parse 	"/*"			{ addWhite lexbuf;
                                           let il = comment lexbuf in
-	                                  let sl = intlist_to_string il in
+	                                  let sl = Util.string_of_list int64_to_char il in
 					  addComment sl;
                                           initial lexbuf}
 |               "//"                    { addWhite lexbuf;
                                           let il = onelinecomment lexbuf in
-                                          let sl = intlist_to_string il in
+                                          let sl = Util.string_of_list int64_to_char il in
                                           addComment sl;
                                           E.newline();
                                           initial lexbuf
@@ -643,7 +637,7 @@ and matchingpars = parse
                      matchingpars lexbuf
                 }
 |  "/*"		{ addWhite lexbuf; let il = comment lexbuf in
-                  let sl = intlist_to_string il in
+                  let sl = Util.string_of_list int64_to_char il in
 		  addComment sl;
                   matchingpars lexbuf}
 |  '"'		{ addWhite lexbuf; (* '"' *)

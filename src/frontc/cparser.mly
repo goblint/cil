@@ -175,12 +175,6 @@ let int64_to_char value =
   else
     Char.chr (Int64.to_int value)
 
-(* takes a not-nul-terminated list, and converts it to a string. *)
-let intlist_to_string (str: int64 list):string =
-  let buffer = Buffer.create 64 in
-  List.iter (fun value -> Buffer.add_char buffer (int64_to_char value)) str;
-  Buffer.contents buffer
-
 let fst3 (result, _, _) = result
 let snd3 (_, result, _) = result
 let trd3 (_, _, result) = result
@@ -750,7 +744,7 @@ const_raw_string:
 
 one_string_constant:
 /* Don't concat multiple strings, or allow other encoding of string.  For asm templates. */
-    CST_STRING                          { intlist_to_string (fst $1) }
+    CST_STRING                          { Util.string_of_list int64_to_char (fst $1) }
 ;
 
 string_list:
