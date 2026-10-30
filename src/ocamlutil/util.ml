@@ -38,6 +38,11 @@ let rec count_map f l ctr =
  
 let list_map f l = count_map f l 0
 
+let string_of_list to_char l =
+  let buffer = Buffer.create 64 in
+  List.iter (fun value -> Buffer.add_char buffer (to_char value)) l;
+  Buffer.contents buffer
+
 (* Memoize *)
 let memoize (h: ('a, 'b) Hashtbl.t) 
             (arg: 'a) 

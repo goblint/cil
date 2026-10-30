@@ -58,19 +58,19 @@ let addComment c =
   GrowArray.setg Cabshelper.commentsGA (i+1) (l,c,false)
 
 (* track whitespace for the current token *)
-let white = ref ""
-let addWhite lexbuf = if not !Whitetrack.enabled then
-    let w = Lexing.lexeme lexbuf in
-    white := !white ^ w
-let clear_white () = white := ""
-let get_white () = !white
+let white = Buffer.create 64
+let addWhite lexbuf =
+    if !Whitetrack.enabled then
+      Buffer.add_string white (Lexing.lexeme lexbuf)
+let clear_white () = Buffer.clear white
+let get_white () = Buffer.contents white
 
-let lexeme = ref ""
+let lexeme = Buffer.create 64
 let addLexeme lexbuf =
-    let l = Lexing.lexeme lexbuf in
-    lexeme := !lexeme ^ l
-let clear_lexeme () = lexeme := ""
-let get_extra_lexeme () = !lexeme
+    if !Whitetrack.enabled then
+      Buffer.add_string lexeme (Lexing.lexeme lexbuf)
+let clear_lexeme () = Buffer.clear lexeme
+let get_extra_lexeme () = Buffer.contents lexeme
 
 let int64_to_char value =
   if (compare value (Int64.of_int 255) > 0) || (compare value Int64.zero < 0) then
@@ -80,14 +80,6 @@ let int64_to_char value =
     end
   else
     Char.chr (Int64.to_int value)
-
-(* takes a not-nul-terminated list, and converts it to a string. *)
-let rec intlist_to_string (str: int64 list):string =
-  match str with
-    [] -> ""  (* add nul-termination *)
-  | value::rest ->
-      let this_char = int64_to_char value in
-      (String.make 1 this_char) ^ (intlist_to_string rest)
 
 (* Some debugging support for line numbers *)
 let dbgToken (t: token) =
@@ -275,6 +267,8 @@ let scan_ident id =
 
 
 let init ~(filename: string) : Lexing.lexbuf =
+  clear_white ();
+  clear_lexeme ();
   init_lexicon ();
   (* Inititialize the pointer in Errormsg *)
   Lexerhack.add_type := add_type;
@@ -287,6 +281,8 @@ let init ~(filename: string) : Lexing.lexbuf =
   E.startParsing filename
 
 let initFromString (s: string) : Lexing.lexbuf =
+  clear_white ();
+  clear_lexeme ();
   init_lexicon ();
   (* Inititialize the pointer in Errormsg *)
   Lexerhack.add_type := add_type;
@@ -481,16 +477,16 @@ let no_parse_pragma =
 
 
 rule initial =
-	parse 	"/*"			{ let il = comment lexbuf in
-	                                  let sl = intlist_to_string il in
+	parse 	"/*"			{ addWhite lexbuf;
+                                          let il = comment lexbuf in
+	                                  let sl = Util.string_of_list int64_to_char il in
 					  addComment sl;
-                                          addWhite lexbuf;
                                           initial lexbuf}
-|               "//"                    { let il = onelinecomment lexbuf in
-                                          let sl = intlist_to_string il in
+|               "//"                    { addWhite lexbuf;
+                                          let il = onelinecomment lexbuf in
+                                          let sl = Util.string_of_list int64_to_char il in
                                           addComment sl;
                                           E.newline();
-                                          addWhite lexbuf;
                                           initial lexbuf
                                            }
 |		blank			{ addWhite lexbuf; initial lexbuf}
@@ -641,7 +637,7 @@ and matchingpars = parse
                      matchingpars lexbuf
                 }
 |  "/*"		{ addWhite lexbuf; let il = comment lexbuf in
-                  let sl = intlist_to_string il in
+                  let sl = Util.string_of_list int64_to_char il in
 		  addComment sl;
                   matchingpars lexbuf}
 |  '"'		{ addWhite lexbuf; (* '"' *)
@@ -670,8 +666,10 @@ and hash = parse
                 (* For pragmas with irregular syntax, like #pragma warning,
                    we parse them as a whole line. *)
 | "pragma" blank (no_parse_pragma as pragmaName)
-                { let here = currentLoc () in
-                  PRAGMA_LINE (pragmaName ^ pragma lexbuf, here)
+                 { let here = currentLoc () in
+                   let buffer = Buffer.create 64 in
+                   Buffer.add_string buffer pragmaName;
+                   PRAGMA_LINE (pragma buffer lexbuf, here)
                 }
 | "pragma"      { pragmaLine := true; PRAGMA (currentLoc ()) }
 | _	        { addWhite lexbuf; endline lexbuf}
@@ -691,10 +689,10 @@ and endline = parse
 |   eof                         { EOF }
 |	_			{ addWhite lexbuf; endline lexbuf}
 
-and pragma = parse
-   '\n'                 { E.newline (); "" }
-|   _                   { let cur = Lexing.lexeme lexbuf in
-                          cur ^ (pragma lexbuf) }
+and pragma buffer = parse
+   '\n'                 { E.newline (); Buffer.contents buffer }
+|   _                   { Buffer.add_char buffer (Lexing.lexeme_char lexbuf 0);
+                          pragma buffer lexbuf }
 
 and str = parse
         '"'             {[]} (* no nul terminiation in CST_STRING '"' *)

@@ -4,6 +4,10 @@ val list_append: ('a list) -> ('a list) -> ('a list) (** tail-recursive append *
 
 val list_map : ('a -> 'b) -> 'a list -> 'b list (** More efficient map *)
 
+(** Convert each element to a character, in list order, without constructing
+    an intermediate character list. Does not append a NUL terminator. *)
+val string_of_list : ('a -> char) -> 'a list -> string
+
 val memoize: ('a, 'b) Hashtbl.t ->
             'a ->
             ('a -> 'b) -> 'b

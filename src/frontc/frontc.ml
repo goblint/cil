@@ -181,6 +181,12 @@ and clexer lexbuf =
     let lexeme = Clexer.get_extra_lexeme () ^ Lexing.lexeme lexbuf in
     white,lexeme,token,cabsloc
 
+and lexer () =
+  (* Avoid constructing raw token spelling and tracking locations when the
+     whitespace-preserving printer is not in use. *)
+  if !Whitetrack.enabled then Whitetrack.wraplexer clexer
+  else Clexer.initial
+
 (* just parse *)
 and parse_to_cabs_inner (fname : string) =
   try
@@ -188,8 +194,8 @@ and parse_to_cabs_inner (fname : string) =
     flush !E.logChannel;
     (* if !E.verboseFlag then ignore @@ Parsing.set_trace true; *)
     let lexbuf = Clexer.init ~filename:fname in
-    let cabs = Stats.time "parse" (Cparser.interpret (Whitetrack.wraplexer clexer)) lexbuf in
-    Whitetrack.setFinalWhite (Clexer.get_white ());
+    let cabs = Stats.time "parse" (Cparser.interpret (lexer ())) lexbuf in
+    Whitetrack.setFinalWhite (if !Whitetrack.enabled then Clexer.get_white () else "\n");
     Clexer.finish ();
     (fname, cabs)
   with (Sys_error msg) -> begin
@@ -276,8 +282,8 @@ let parse_standalone_exp s =
     flush !E.logChannel;
     (* if !E.verboseFlag then ignore @@ Parsing.set_trace true; *)
     let lexbuf = Clexer.initFromString s in
-    let (cabs, _) = Stats.time "parse" (Cparser.expression (Whitetrack.wraplexer clexer)) lexbuf in
-    Whitetrack.setFinalWhite (Clexer.get_white ());
+    let (cabs, _) = Stats.time "parse" (Cparser.expression (lexer ())) lexbuf in
+    Whitetrack.setFinalWhite (if !Whitetrack.enabled then Clexer.get_white () else "\n");
     Clexer.finish ();
     cabs
   with

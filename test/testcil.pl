@@ -243,6 +243,7 @@ addTest("testrunc11/bitfield4");
 
 addTest("testrun/bitfield2");
 addTest("testrun/call2 ");
+addTest("testrun/chunk_assembly");
 addTest("test/cast1");
 addTest("test/cast2");
 addTest("test/cast4 _GNUCC=1");

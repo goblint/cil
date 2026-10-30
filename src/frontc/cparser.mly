@@ -175,14 +175,6 @@ let int64_to_char value =
   else
     Char.chr (Int64.to_int value)
 
-(* takes a not-nul-terminated list, and converts it to a string. *)
-let rec intlist_to_string (str: int64 list):string =
-  match str with
-    [] -> ""  (* add nul-termination *)
-  | value::rest ->
-      let this_char = int64_to_char value in
-      (String.make 1 this_char) ^ (intlist_to_string rest)
-
 let fst3 (result, _, _) = result
 let snd3 (_, result, _) = result
 let trd3 (_, _, result) = result
@@ -752,7 +744,7 @@ const_raw_string:
 
 one_string_constant:
 /* Don't concat multiple strings, or allow other encoding of string.  For asm templates. */
-    CST_STRING                          { intlist_to_string (fst $1) }
+    CST_STRING                          { Util.string_of_list int64_to_char (fst $1) }
 ;
 
 string_list:
@@ -1149,13 +1141,13 @@ type_spec:   /* ISO 6.7.2 */
 |   ENUM                   id_or_typename
                                                    { Tenum   ($2, None,    []), $1 }
 |   ENUM                   id_or_typename LBRACE enum_list maybecomma RBRACE
-                                                   { Tenum   ($2, Some $4, []), $1 }
+                                                   { Tenum   ($2, Some (List.rev $4), []), $1 }
 |   ENUM                                  LBRACE enum_list maybecomma RBRACE
-                                                   { Tenum   ("", Some $3, []), $1 }
+                                                   { Tenum   ("", Some (List.rev $3), []), $1 }
 |   ENUM   just_attributes id_or_typename LBRACE enum_list maybecomma RBRACE
-                                                   { Tenum   ($3, Some $5, $2), $1 }
+                                                   { Tenum   ($3, Some (List.rev $5), $2), $1 }
 |   ENUM   just_attributes                LBRACE enum_list maybecomma RBRACE
-                                                   { Tenum   ("", Some $4, $2), $1 }
+                                                   { Tenum   ("", Some (List.rev $4), $2), $1 }
 |   NAMED_TYPE      { Tnamed (fst $1), snd $1 }
 |   TYPEOF LPAREN comma_expression RPAREN     { TtypeofE (smooth_expression (fst $3)), $1 }
 |   TYPEOF LPAREN type_name RPAREN      { let s, d = $3 in
@@ -1199,9 +1191,9 @@ field_decl: /* (* ISO 6.7.2. Except that we allow unnamed fields. *) */
 |              COLON expression     { (missingFieldDecl, Some (fst $2)) }
 ;
 
-enum_list: /* (* ISO 6.7.2.2 *) */
+enum_list: /* (* ISO 6.7.2.2. Accumulate in reverse to avoid quadratic appends. *) */
     enumerator				{[$1]}
-|   enum_list COMMA enumerator	        {$1 @ [$3]}
+|   enum_list COMMA enumerator	        {$3 :: $1}
 |   enum_list COMMA error               { $1 }
 ;
 enumerator:
