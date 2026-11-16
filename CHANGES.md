@@ -1,3 +1,11 @@
+## 2.2.0
+* Add `asm goto` support (#81, #92, #150, #161, #203).
+* Add C23 binary integer constant support (#238).
+* Fix integer kinds for unrepresentable and 128bit values (#234).
+* Fix bit-field integer promotion (#212, #218).
+* Make `switch` statement locations synthetic (#235).
+* Optimize lexing, parsing and alpha renaming of large programs (#237).
+
 ## 2.1.1
 * Add attribute `goblint_cil_pulledup` to static variables pulled up from local scope to global scope (#225, #226).
 * Add pure `__builtin_bswap16` evaluation (#202).
