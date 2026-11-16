@@ -26,7 +26,7 @@ This is a fork of the 'cil' package used for 'goblint'. Major changes include:
     (ocamlfind :with-test)
     zarith
     (hevea :with-doc)
-    dune
+    (dune (< 3.25))
     dune-configurator
     (odoc :with-doc)
     stdlib-shims

@@ -33,7 +33,7 @@ depends: [
   "ocamlfind" {with-test}
   "zarith"
   "hevea" {with-doc}
-  "dune" {>= "2.7"}
+  "dune" {>= "2.7" & < "3.25"}
   "dune-configurator"
   "odoc" {with-doc}
   "stdlib-shims"
