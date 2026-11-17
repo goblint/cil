@@ -808,8 +808,9 @@ sub separateTrueObjects {
         open(IN, "<$combsrcname") || die "Cannot read $combsrcname";
         my $fstline = <IN>;
         close(IN);
+        my $should_merge = 0;
         if($fstline =~ m|CIL|) {
-            goto ToMerge;
+            $should_merge = 1;
         }
         if($fstline =~ m|^\#pragma merger\(\"(\d+)\",\".*\",\"(.*)\"\)$|) {
             my $mymtime = $1;
@@ -822,25 +823,25 @@ sub separateTrueObjects {
                     push @ccmerged, $arg
                 }
             }
-          ToMerge:
-            if($mymtime == $mtime) { # It is ours
-                # See if we have this already
-                if(! grep { $_ eq $srcname } @tomerge) { # It is ours
-                    push @tomerge, $combsrc;
-                    # See if there is a a trueobjs file also
-                    my $trueobjs = $combsrcname . "_trueobjs";
-                    if(-f $trueobjs) {
-                        open(TRUEOBJS, "<$trueobjs")
-                            || die "Cannot read $trueobjs";
-                        while(<TRUEOBJS>) {
-                            chop;
-                            push @othersources, $_;
-                        }
-                        close(TRUEOBJS);
+            $should_merge = ($mymtime == $mtime); # It is ours
+        }
+        if ($should_merge) {
+            # See if we have this already
+            if(! grep { $_ eq $srcname } @tomerge) { # It is ours
+                push @tomerge, $combsrc;
+                # See if there is a a trueobjs file also
+                my $trueobjs = $combsrcname . "_trueobjs";
+                if(-f $trueobjs) {
+                    open(TRUEOBJS, "<$trueobjs")
+                        || die "Cannot read $trueobjs";
+                    while(<TRUEOBJS>) {
+                        chop;
+                        push @othersources, $_;
                     }
+                    close(TRUEOBJS);
                 }
-                next;
             }
+            next;
         }
         push @othersources, $combsrc;
     }
