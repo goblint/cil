@@ -131,7 +131,7 @@ endif
 CFLAGS += -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=int-conversion -Wno-error=incompatible-pointer-types
 
 # TODO: Force gnu11 because we're not ready for c23 yet
-CFLAGS += -std=gnu11 
+CFLAGS += -std=gnu11
 
 # sm: this will make gcc warnings into errors; it's almost never
 # what we want, but for a particular testcase (combine_copyptrs)
@@ -279,8 +279,7 @@ else
 endif
 
 testrun/% : $(SMALL1)/%.ml
-	ocamlfind $(CAMLC) -I $(OBJDIR_DUNE) -I $(OBJDIR_MAKE) -package zarith unix.$(CMXA) str.$(CMXA) zarith.$(CMXA) \
-                 goblintCil.$(CMXA) \
+	ocamlfind $(CAMLC) -package goblint-cil -linkpkg \
                  $(EXEOUT) $(basename $<).exe $<
 	$(basename $<).exe
 	echo SUCCESS
