@@ -351,7 +351,8 @@ let genv : (string, envdata * location) H.t = H.create 307
     hash table easily *)
 type undoScope =
     UndoRemoveFromEnv of string
-  | UndoResetAlphaCounter of location AL.alphaTableData ref *
+  | UndoResetAlphaCounter of string *
+                             location AL.alphaTableData ref *
                              location AL.alphaTableData
   | UndoRemoveFromAlphaTable of string
 
@@ -426,14 +427,29 @@ let newAlphaName (globalscope: bool) (* The name should have global scope *)
         let prefix = AL.getAlphaPrefix ~lookupname:lookupname in
         try
           let countref = H.find alphaTable prefix in
-          s := (UndoResetAlphaCounter (countref, !countref)) :: !s
+          s := (UndoResetAlphaCounter (prefix, countref, !countref)) :: !s
         with Not_found ->
           s := (UndoRemoveFromAlphaTable prefix) :: !s
     end
     | _ :: rest -> findEnclosingFun rest
   in
   if not globalscope then
-    findEnclosingFun !scopes;
+    findEnclosingFun !scopes
+  else (
+    let rec checkScopes = (function
+      [s] ->
+        let prefix = AL.getAlphaPrefix ~lookupname:lookupname in
+        s := List.filter (function
+          UndoResetAlphaCounter (p, _, _) when p = prefix -> false
+        | UndoRemoveFromAlphaTable p when p = prefix -> false
+        | _ -> true
+        ) !s
+      | _ :: rest -> checkScopes rest
+      | _ -> ()
+    )
+    in  
+    checkScopes !scopes
+  );
   let newname, oldloc =
            AL.newAlphaName ~alphaTable:alphaTable ~undolist:None ~lookupname:lookupname ~data:!currentLoc in
   stripKind kind newname, oldloc
@@ -502,7 +518,7 @@ let exitScope () =
     | UndoRemoveFromEnv n :: t ->
         H.remove env n; loop t
     | UndoRemoveFromAlphaTable n :: t -> H.remove alphaTable n; loop t
-    | UndoResetAlphaCounter (vref, oldv) :: t ->
+    | UndoResetAlphaCounter (_, vref, oldv) :: t ->
         vref := oldv;
         loop t
   in
