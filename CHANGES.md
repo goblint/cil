@@ -1,3 +1,7 @@
+## 2.2.1
+* Fix test compatibility with dune 3.25 (#241).
+* Fix `cilly` compatibility with Perl 5.44 (#242).
+
 ## 2.2.0
 * Add `asm goto` support (#81, #92, #150, #161, #203).
 * Add C23 binary integer constant support (#238).
