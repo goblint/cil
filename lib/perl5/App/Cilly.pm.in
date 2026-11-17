@@ -1694,7 +1694,6 @@ sub parseLinkerScript {
 
     if(! defined($self->{FLATTEN_LINKER_SCRIPTS}) ||
        $filename !~ /\.o$/) {
-      NotAScript:
         warn "$filename is not a linker script\n" if $linker_script_debug;
         push @{$self->{OFILES}}, $filename;
         return 1;
@@ -1705,7 +1704,9 @@ sub parseLinkerScript {
     my $line = <OBJFILE>;
     if ($line !~ /^INPUT/) {
         close OBJFILE or die $!;
-        goto NotAScript;
+        warn "$filename is not a linker script\n" if $linker_script_debug;
+        push @{$self->{OFILES}}, $filename;
+        return 1;
     }
     warn "\tYES an INPUT file.\n" if $linker_script_debug;
     my @lines = <OBJFILE>; # Read it all and close it
