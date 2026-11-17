@@ -893,22 +893,28 @@ sub link {
     }
     # Check the modification times and see if we can just use the combined
     # file instead of merging all over again
+    my $canReuse = 0;
+    my $combFile;
     if(@{$tomerge} > 1 && $self->{KEEPMERGED}) {
-        my $canReuse = 1;
-        my $combFile = new App::Cilly::OutputFile($destname,
+        $canReuse = 1;
+        $combFile = new App::Cilly::OutputFile($destname,
                                       "${destname}_comb.c");
         my @tmp = stat($combFile);
         my $combFileMtime = $tmp[9] || 0;
         foreach my $mrg (@{$tomerge}) {
             my @tmp = stat($mrg); my $mtime = $tmp[9];
-            if($mtime >= $combFileMtime) { goto DoMerge; }
+            if($mtime >= $combFileMtime) {
+                $canReuse = 0;
+                last;
+            }
         }
+    }
+    if($canReuse) {
         if($self->{VERBOSE}) {
             print STDERR "Reusing merged file $combFile\n";
         }
         $self->applyCilAndCompile([$combFile], $mergedobj, $ppargs, $ccargs);
     } else {
-      DoMerge:
         $self->applyCilAndCompile($tomerge, $mergedobj, $ppargs, $ccargs);
     }
 
