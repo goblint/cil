@@ -808,8 +808,9 @@ sub separateTrueObjects {
         open(IN, "<$combsrcname") || die "Cannot read $combsrcname";
         my $fstline = <IN>;
         close(IN);
+        my $should_merge = 0;
         if($fstline =~ m|CIL|) {
-            goto ToMerge;
+            $should_merge = 1;
         }
         if($fstline =~ m|^\#pragma merger\(\"(\d+)\",\".*\",\"(.*)\"\)$|) {
             my $mymtime = $1;
@@ -822,25 +823,25 @@ sub separateTrueObjects {
                     push @ccmerged, $arg
                 }
             }
-          ToMerge:
-            if($mymtime == $mtime) { # It is ours
-                # See if we have this already
-                if(! grep { $_ eq $srcname } @tomerge) { # It is ours
-                    push @tomerge, $combsrc;
-                    # See if there is a a trueobjs file also
-                    my $trueobjs = $combsrcname . "_trueobjs";
-                    if(-f $trueobjs) {
-                        open(TRUEOBJS, "<$trueobjs")
-                            || die "Cannot read $trueobjs";
-                        while(<TRUEOBJS>) {
-                            chop;
-                            push @othersources, $_;
-                        }
-                        close(TRUEOBJS);
+            $should_merge = ($mymtime == $mtime); # It is ours
+        }
+        if ($should_merge) {
+            # See if we have this already
+            if(! grep { $_ eq $srcname } @tomerge) { # It is ours
+                push @tomerge, $combsrc;
+                # See if there is a a trueobjs file also
+                my $trueobjs = $combsrcname . "_trueobjs";
+                if(-f $trueobjs) {
+                    open(TRUEOBJS, "<$trueobjs")
+                        || die "Cannot read $trueobjs";
+                    while(<TRUEOBJS>) {
+                        chop;
+                        push @othersources, $_;
                     }
+                    close(TRUEOBJS);
                 }
-                next;
             }
+            next;
         }
         push @othersources, $combsrc;
     }
@@ -892,22 +893,28 @@ sub link {
     }
     # Check the modification times and see if we can just use the combined
     # file instead of merging all over again
+    my $canReuse = 0;
+    my $combFile;
     if(@{$tomerge} > 1 && $self->{KEEPMERGED}) {
-        my $canReuse = 1;
-        my $combFile = new App::Cilly::OutputFile($destname,
+        $canReuse = 1;
+        $combFile = new App::Cilly::OutputFile($destname,
                                       "${destname}_comb.c");
         my @tmp = stat($combFile);
         my $combFileMtime = $tmp[9] || 0;
         foreach my $mrg (@{$tomerge}) {
             my @tmp = stat($mrg); my $mtime = $tmp[9];
-            if($mtime >= $combFileMtime) { goto DoMerge; }
+            if($mtime >= $combFileMtime) {
+                $canReuse = 0;
+                last;
+            }
         }
+    }
+    if($canReuse) {
         if($self->{VERBOSE}) {
             print STDERR "Reusing merged file $combFile\n";
         }
         $self->applyCilAndCompile([$combFile], $mergedobj, $ppargs, $ccargs);
     } else {
-      DoMerge:
         $self->applyCilAndCompile($tomerge, $mergedobj, $ppargs, $ccargs);
     }
 
@@ -1687,7 +1694,6 @@ sub parseLinkerScript {
 
     if(! defined($self->{FLATTEN_LINKER_SCRIPTS}) ||
        $filename !~ /\.o$/) {
-      NotAScript:
         warn "$filename is not a linker script\n" if $linker_script_debug;
         push @{$self->{OFILES}}, $filename;
         return 1;
@@ -1698,7 +1704,9 @@ sub parseLinkerScript {
     my $line = <OBJFILE>;
     if ($line !~ /^INPUT/) {
         close OBJFILE or die $!;
-        goto NotAScript;
+        warn "$filename is not a linker script\n" if $linker_script_debug;
+        push @{$self->{OFILES}}, $filename;
+        return 1;
     }
     warn "\tYES an INPUT file.\n" if $linker_script_debug;
     my @lines = <OBJFILE>; # Read it all and close it
