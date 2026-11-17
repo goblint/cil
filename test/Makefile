@@ -131,7 +131,7 @@ endif
 CFLAGS += -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=int-conversion -Wno-error=incompatible-pointer-types
 
 # TODO: Force gnu11 because we're not ready for c23 yet
-CFLAGS += -std=gnu11 
+CFLAGS += -std=gnu11
 
 # sm: this will make gcc warnings into errors; it's almost never
 # what we want, but for a particular testcase (combine_copyptrs)
@@ -268,19 +268,14 @@ scott-nolink/%: $(TESTDIR)/small2/%.c $(TARGET_DEP)
 
 
 
-OBJDIR_DUNE := $(CILHOME)/../install/default/lib/goblint-cil
-OBJDIR_MAKE := $(CILHOME)/_build/src
 ifdef NATIVECAML
- CMXA := cmxa
  CAMLC := ocamlopt
 else
- CMXA := cma
  CAMLC := ocamlc
 endif
 
 testrun/% : $(SMALL1)/%.ml
-	ocamlfind $(CAMLC) -I $(OBJDIR_DUNE) -I $(OBJDIR_MAKE) -package zarith unix.$(CMXA) str.$(CMXA) zarith.$(CMXA) \
-                 goblintCil.$(CMXA) \
+	ocamlfind $(CAMLC) -package goblint-cil -linkpkg \
                  $(EXEOUT) $(basename $<).exe $<
 	$(basename $<).exe
 	echo SUCCESS
