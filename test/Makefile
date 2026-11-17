@@ -268,13 +268,9 @@ scott-nolink/%: $(TESTDIR)/small2/%.c $(TARGET_DEP)
 
 
 
-OBJDIR_DUNE := $(CILHOME)/../install/default/lib/goblint-cil
-OBJDIR_MAKE := $(CILHOME)/_build/src
 ifdef NATIVECAML
- CMXA := cmxa
  CAMLC := ocamlopt
 else
- CMXA := cma
  CAMLC := ocamlc
 endif
 
