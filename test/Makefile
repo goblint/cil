@@ -274,6 +274,7 @@ else
  CAMLC := ocamlc
 endif
 
+# Use Dune's package environment rather than a hard-coded install path.
 testrun/% : $(SMALL1)/%.ml
 	ocamlfind $(CAMLC) -package goblint-cil -linkpkg \
                  $(EXEOUT) $(basename $<).exe $<
